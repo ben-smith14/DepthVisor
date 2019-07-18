@@ -1,30 +1,19 @@
 ﻿using UnityEngine;
-using System.Collections;
 using Windows.Kinect;
-
-// Enum that allows switching between using the multi source frame reader
-// and the individual color and depth frames to generate the mesh when the
-// user clicks
-public enum CustomDepthViewMode
-{
-    SeparateSourceReaders,
-    MultiSourceReader,
-}
+using System.Collections.Generic;
 
 public class CustomDepthSourceView : MonoBehaviour
 {
-    public CustomDepthViewMode ViewMode = CustomDepthViewMode.SeparateSourceReaders;
-    
-    public GameObject ColorSourceManager;
-    public GameObject DepthSourceManager;
-    public GameObject MultiSourceManager;
-    
+    [SerializeField] GameObject MultiSourceManager;
+    [Range(2.0f, 25.0f)] [SerializeField] float EdgeThreshold = 5.0f;
+
     private KinectSensor _Sensor;
     private CoordinateMapper _Mapper;
     private Mesh _Mesh;
     private Vector3[] _Vertices;
     private Vector2[] _UV;
     private int[] _Triangles;
+    private List<int> _ThresholdTris;
 
     // Only works at 4 right now - DO I NEED TO DOWNSAMPLE??
     private const int _DownsampleSize = 4;
@@ -32,8 +21,6 @@ public class CustomDepthSourceView : MonoBehaviour
     private const int _Speed = 50;
     
     private MultiSourceManager _MultiManager;
-    private ColorSourceManager _ColorManager;
-    private DepthSourceManager _DepthManager;
 
     // Initialise the connection to the Kinect
     void Start()
@@ -73,12 +60,12 @@ public class CustomDepthSourceView : MonoBehaviour
                 int index = (y * width) + x;
 
                 _Vertices[index] = new Vector3(x, -y, 0);
-                _UV[index] = new Vector2(((float)x / (float)width), ((float)y / (float)height));
+                _UV[index] = new Vector2((x / width), (y / height));
 
                 // Skip the last row/col
                 if (x != (width - 1) && y != (height - 1))
                 {
-                    // Set up triangles
+                    // Set up triangle corners
                     int topLeft = index;
                     int topRight = topLeft + 1;
                     int bottomLeft = topLeft + width;
@@ -97,20 +84,7 @@ public class CustomDepthSourceView : MonoBehaviour
         _Mesh.vertices = _Vertices;
         _Mesh.uv = _UV;
         _Mesh.triangles = _Triangles;
-
-        /////////////////////////////
-        // _Mesh.SetIndices(_Mesh.GetIndices(0), MeshTopology.Points, 0);
-        /////////////////////////////
-
         _Mesh.RecalculateNormals();
-    }
-    
-    void OnGUI()
-    {
-        // Show the current selected enum on the user's screen
-        GUI.BeginGroup(new Rect(0, 0, Screen.width, Screen.height));
-        GUI.TextField(new Rect(Screen.width - 250 , 10, 250, 20), "DepthMode: " + ViewMode.ToString());
-        GUI.EndGroup();
     }
 
     void Update()
@@ -120,77 +94,22 @@ public class CustomDepthSourceView : MonoBehaviour
         {
             return;
         }
-        
-        // If the user clicks, switch view mode
-        if (Input.GetButtonDown("Fire1"))
+
+        if (MultiSourceManager == null)
         {
-            if(ViewMode == CustomDepthViewMode.MultiSourceReader)
-            {
-                ViewMode = CustomDepthViewMode.SeparateSourceReaders;
-            }
-            else
-            {
-                ViewMode = CustomDepthViewMode.MultiSourceReader;
-            }
+            return;
         }
-        
-        // Allow the use of the arrow keys to navigate around the scene
-        float yVal = Input.GetAxis("Horizontal");
-        float xVal = -Input.GetAxis("Vertical");
-        transform.Rotate(
-            (xVal * Time.deltaTime * _Speed), 
-            (yVal * Time.deltaTime * _Speed), 
-            0, 
-            Space.Self);
             
-        // Refresh the mesh data with different parameteres depending on the source selected
-        if (ViewMode == CustomDepthViewMode.SeparateSourceReaders)
+        _MultiManager = MultiSourceManager.GetComponent<MultiSourceManager>();
+        if (_MultiManager == null)
         {
-            if (ColorSourceManager == null)
-            {
-                return;
-            }
-            
-            _ColorManager = ColorSourceManager.GetComponent<ColorSourceManager>();
-            if (_ColorManager == null)
-            {
-                return;
-            }
-            
-            if (DepthSourceManager == null)
-            {
-                return;
-            }
-            
-            _DepthManager = DepthSourceManager.GetComponent<DepthSourceManager>();
-            if (_DepthManager == null)
-            {
-                return;
-            }
-            
-            gameObject.GetComponent<Renderer>().material.mainTexture = _ColorManager.GetColorTexture();
-            RefreshData(_DepthManager.GetData(),
-                _ColorManager.ColorWidth,
-                _ColorManager.ColorHeight);
+            return;
         }
-        else
-        {
-            if (MultiSourceManager == null)
-            {
-                return;
-            }
             
-            _MultiManager = MultiSourceManager.GetComponent<MultiSourceManager>();
-            if (_MultiManager == null)
-            {
-                return;
-            }
-            
-            gameObject.GetComponent<Renderer>().material.mainTexture = _MultiManager.GetColorTexture();
-            RefreshData(_MultiManager.GetDepthData(),
-                        _MultiManager.ColorWidth,
-                        _MultiManager.ColorHeight);
-        }
+        gameObject.GetComponent<Renderer>().material.mainTexture = _MultiManager.GetColorTexture();
+        RefreshData(_MultiManager.GetDepthData(),
+                    _MultiManager.ColorWidth,
+                    _MultiManager.ColorHeight);
     }
     
     private void RefreshData(ushort[] depthData, int colorWidth, int colorHeight)
@@ -213,23 +132,69 @@ public class CustomDepthSourceView : MonoBehaviour
                 
                 avg = avg * _DepthScale;
                 
-                _Vertices[smallIndex].z = (float)avg;
+                _Vertices[smallIndex].z = (float) avg;
                 
                 // Update UV mapping with CDRP
                 var colorSpacePoint = colorSpace[(y * frameDesc.Width) + x];
                 _UV[smallIndex] = new Vector2(colorSpacePoint.X / colorWidth, colorSpacePoint.Y / colorHeight);
             }
         }
-        
+
+
+        _ThresholdTris = new List<int>();
+        for (int y = 0; y < frameDesc.Height; y += _DownsampleSize)
+        {
+            for (int x = 0; x < frameDesc.Width; x += _DownsampleSize)
+            {
+                int indexX = x / _DownsampleSize;
+                int indexY = y / _DownsampleSize;
+                int smallIndex = (indexY * (frameDesc.Width / _DownsampleSize)) + indexX;
+
+                // Skip the last row/col
+                if (x != (frameDesc.Width - _DownsampleSize) && y != (frameDesc.Height - _DownsampleSize))
+                {
+                    // Set up triangle corners
+                    int topLeft = smallIndex;
+                    int topRight = topLeft + 1;
+                    int bottomLeft = topLeft + (frameDesc.Width / _DownsampleSize);
+                    int bottomRight = bottomLeft + 1;
+
+                    // Find the vertex coordinates for each one
+                    Vector3 vertex1 = _Vertices[topLeft];
+                    Vector3 vertex2 = _Vertices[topRight];
+                    Vector3 vertex3 = _Vertices[bottomLeft];
+                    Vector3 vertex4 = _Vertices[bottomRight];
+
+                    // Find the length of all edges in the quad
+                    float edge1 = Vector3.Distance(vertex1, vertex2);
+                    float edge2 = Vector3.Distance(vertex2, vertex3);
+                    float edge3 = Vector3.Distance(vertex3, vertex1);
+                    float edge4 = Vector3.Distance(vertex2, vertex4);
+                    float edge5 = Vector3.Distance(vertex4, vertex3);
+
+                    // If all edges of the first triangle are less than or equal to the threshold
+                    // value, add the triangle
+                    if (edge1 <= EdgeThreshold && edge2 <= EdgeThreshold && edge3 <= EdgeThreshold)
+                    {
+                        _ThresholdTris.Add(topLeft);
+                        _ThresholdTris.Add(topRight);
+                        _ThresholdTris.Add(bottomLeft);
+                    }
+
+                    // Do the same for the second triangle in the quad
+                    if (edge2 <= EdgeThreshold && edge4 <= EdgeThreshold && edge5 <= EdgeThreshold)
+                    {
+                        _ThresholdTris.Add(bottomLeft);
+                        _ThresholdTris.Add(topRight);
+                        _ThresholdTris.Add(bottomRight);
+                    }
+                }
+            }
+        }
+
         _Mesh.vertices = _Vertices;
         _Mesh.uv = _UV;
-        _Mesh.triangles = _Triangles;
-        // _Mesh.colors
-
-        /////////////////////////////
-        // _Mesh.SetIndices(_Mesh.GetIndices(0), MeshTopology.Points, 0);
-        /////////////////////////////
-
+        _Mesh.triangles = _ThresholdTris.ToArray();
         _Mesh.RecalculateNormals();
     }
     
