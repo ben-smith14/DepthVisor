@@ -2,7 +2,7 @@
 using Windows.Kinect;
 using System.Collections.Generic;
 
-public class CustomDepthSourceView : MonoBehaviour
+public class ShaderTest : MonoBehaviour
 {
     [SerializeField] GameObject MultiSourceManager;
     [Range(2.0f, 25.0f)] [SerializeField] float EdgeThreshold = 5.0f;
@@ -105,11 +105,13 @@ public class CustomDepthSourceView : MonoBehaviour
         {
             return;
         }
-            
+
+        ComputeBuffer depthBuffer = new ComputeBuffer(_Vertices.Length, sizeof(float), ComputeBufferType.Default);
         gameObject.GetComponent<Renderer>().material.mainTexture = _MultiManager.GetColorTexture();
-        RefreshData(_MultiManager.GetDepthData(),
-                    _MultiManager.ColorWidth,
-                    _MultiManager.ColorHeight);
+
+        //RefreshData(_MultiManager.GetDepthData(),
+        //            _MultiManager.ColorWidth,
+        //            _MultiManager.ColorHeight);
     }
     
     private void RefreshData(ushort[] depthData, int colorWidth, int colorHeight)

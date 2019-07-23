@@ -3,71 +3,82 @@ using TMPro;
 
 public class CameraOrbitControls : MonoBehaviour
 {
-    [SerializeField] GameObject target;
-    [SerializeField] float startCameraElevation = 20f;
-    [SerializeField] float startCameraAzimuth = 0f;
-    [SerializeField] float cameraRadius = 10f;
-    [SerializeField] float moveSpeed = 1f;
+    [Header("Tuning Parameters")]
+    [SerializeField] float StartCameraRadius = 10f;
+    [SerializeField] float StartCameraElevation = 20f;
+    [SerializeField] float StartCameraAzimuth = 0f;
+    [SerializeField] float MoveSpeed = 1f;
+    [SerializeField] float ZoomSpeed = 1f;
+    [SerializeField] float RadiusMin = 5f;
+    [SerializeField] float RadiusMax = 25f;
 
-    [SerializeField] TextMeshProUGUI azimuthText;
-    [SerializeField] TextMeshProUGUI elevationText;
+    [Header("Game Objects")]
+    [SerializeField] GameObject Target;
+    [SerializeField] TextMeshProUGUI RadiusText;
+    [SerializeField] TextMeshProUGUI AzimuthText;
+    [SerializeField] TextMeshProUGUI ElevationText;
 
+    [System.NonSerialized]
+    public bool MouseDrag;
     private CameraHemisphere cameraHemisphere;
-
-    public enum Directions
-    {
-        UP,
-        DOWN,
-        LEFT,
-        RIGHT
-    }
 
     public void Start()
     {
-        // Initialise the camera hemisphere object at the origin of the target and with a given radius.
+        // Initialise the camera hemisphere object at the origin of the target and with the starting radius.
         // Then, move the camera to its starting position using the provided elevation and azimuth. Finally,
-        //rotate the camera to point at the target.
-        cameraHemisphere = new CameraHemisphere(this, target.transform.position, cameraRadius);
-        transform.position = cameraHemisphere.InitialiseCameraPos(Mathf.Deg2Rad * startCameraElevation, Mathf.Deg2Rad * startCameraAzimuth);
-        transform.LookAt(target.transform);
+        // rotate the camera to point at the target.
+        cameraHemisphere = new CameraHemisphere(this, Target.transform.position, StartCameraRadius);
+        transform.position = cameraHemisphere.InitialiseCameraPos(Mathf.Deg2Rad * StartCameraElevation, Mathf.Deg2Rad * StartCameraAzimuth);
+        transform.LookAt(Target.transform);
+
+        MouseDrag = true; // TODO : DO I NEED TO INITIALISE THIS HERE?
     }
 
     public void LateUpdate()
     {
-        // For each type of input, give a specific direction to the method that moves the camera and then
-        // set the camera to its new position, again rotating it to face the target.
+        float verticalValue = 0.0f;
+        float horizontalValue = 0.0f;
 
-        // Vertical keys
-        if (Input.GetKey(KeyCode.UpArrow) && !Input.GetKey(KeyCode.DownArrow))
+        // If mouse drag is disabled by either the mouse being in the options panel or playback control section,
+        // or the main mouse button is not being held down, only use the arrow keys for movement
+        if (!MouseDrag || !Input.GetMouseButton(0))
         {
-            transform.position = cameraHemisphere.MoveCamera(moveSpeed, Directions.UP);
-            transform.LookAt(target.transform);
-        } else if (Input.GetKey(KeyCode.DownArrow) && !Input.GetKey(KeyCode.UpArrow))
+            verticalValue = Input.GetAxis("Vertical");
+            horizontalValue = Input.GetAxis("Horizontal");
+        }
+        else
         {
-            transform.position = cameraHemisphere.MoveCamera(moveSpeed, Directions.DOWN);
-            transform.LookAt(target.transform);
+            // Otherwise, use the mouse movement to transform the camera position, inverting the directions to
+            // give the desired dragging effect
+            verticalValue = -Input.GetAxis("Mouse Y");
+            horizontalValue = -Input.GetAxis("Mouse X");
         }
 
-        // Horizontal keys
-        if (Input.GetKey(KeyCode.LeftArrow) && !Input.GetKey(KeyCode.RightArrow))
+        // Get the mouse scroll movement and invert again to give forward for zooming in and backwards for
+        // zooming out (TODO : Give option to invert this in options panel??)
+        float zoomAmount = -Input.mouseScrollDelta.y;
+
+        // If at least one of the values is not equal to 0, move the camera in the desired direction
+        if (verticalValue != 0.0f || horizontalValue != 0.0f || zoomAmount != 0.0f)
         {
-            transform.position = cameraHemisphere.MoveCamera(moveSpeed, Directions.LEFT);
-            transform.LookAt(target.transform);
+            transform.position = cameraHemisphere.MoveCamera(MoveSpeed, verticalValue, horizontalValue);
+            transform.position = cameraHemisphere.ZoomCamera(ZoomSpeed, zoomAmount); // TODO : Maybe move to another if statement
+            transform.LookAt(Target.transform);
         }
-        else if (Input.GetKey(KeyCode.RightArrow) && !Input.GetKey(KeyCode.LeftArrow))
-        {
-            transform.position = cameraHemisphere.MoveCamera(moveSpeed, Directions.RIGHT);
-            transform.LookAt(target.transform);
-        }
+    }
+
+    public void MouseDragEnabled()
+    {
+        MouseDrag = true;
+    }
+
+    public void MouseDragDisabled()
+    {
+        MouseDrag = false;
     }
 
     private class CameraHemisphere
     {
-        private CameraOrbitControls cameraOrbit;
-        private Vector3 origin;
-        private float radius;
-        private Vector3 cameraPosition;
-
         public CameraHemisphere(CameraOrbitControls cameraOrbitControls, Vector3 origin, float radius)
         {
             CameraOrbit = cameraOrbitControls;
@@ -79,7 +90,7 @@ public class CameraOrbitControls : MonoBehaviour
             CameraPosition = Origin + new Vector3(0f, 0f, radius);
         }
 
-        public CameraOrbitControls CameraOrbit { get; set; }
+        public static CameraOrbitControls CameraOrbit { get; set; }
         public Vector3 Origin { get; set; }
         public float Radius { get; set; }
         public Vector3 CameraPosition { get; set; }
@@ -95,8 +106,8 @@ public class CameraOrbitControls : MonoBehaviour
             cameraSpherePos.Azimuth += azimuth;
 
             // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
-            CameraOrbit.azimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
-            CameraOrbit.elevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
+            CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
+            CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
 
             // Finally, convert the spherical coordinates back to cartesian, move back to the correct
             // position with regards to the target and store the new position, also returning this vector.
@@ -104,34 +115,18 @@ public class CameraOrbitControls : MonoBehaviour
             return CameraPosition;
         }
 
-        public Vector3 MoveCamera(float moveSpeed, Directions keyDirection)
+        public Vector3 MoveCamera(float moveSpeed, float verticalMove, float horizontalMove)
         {
             // Again, convert cartesian vector to spherical coordinates with target on
             // global origin
             SphericalCoordinates cameraSpherePos = CartesianToSpherical(CameraPosition - Origin);
 
-            // For each type of direction specified, increment the apprpriate spherical
-            // coordinate angle in the positive or negative direction using the move speed
-            // variable
-            switch (keyDirection)
-            {
-                case Directions.UP:
-                    cameraSpherePos.Elevation += moveSpeed * Time.deltaTime;
-                    break;
-                case Directions.DOWN:
-                    cameraSpherePos.Elevation -= moveSpeed * Time.deltaTime;
-                    break;
-                case Directions.LEFT:
-                    cameraSpherePos.Azimuth -= moveSpeed * Time.deltaTime;
-                    break;
-                case Directions.RIGHT:
-                    cameraSpherePos.Azimuth += moveSpeed * Time.deltaTime;
-                    break;
-            }
+            cameraSpherePos.Elevation += verticalMove * Time.deltaTime * moveSpeed;
+            cameraSpherePos.Azimuth += horizontalMove * Time.deltaTime * moveSpeed;
 
             // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
-            CameraOrbit.azimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
-            CameraOrbit.elevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
+            CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
+            CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
 
             // Convert the coordinates back and associate with the true target origin once again.
             // Then, save and return the new vector position.
@@ -139,16 +134,34 @@ public class CameraOrbitControls : MonoBehaviour
             return CameraPosition;
         }
 
-        // Formulae from wikipedia
+        public Vector3 ZoomCamera(float zoomSpeed, float zoomAmount)
+        {
+            // Again, convert cartesian vector to spherical coordinates with target on
+            // global origin
+            SphericalCoordinates cameraSpherePos = CartesianToSpherical(CameraPosition - Origin);
+
+            cameraSpherePos.Radius += zoomAmount * Time.deltaTime * zoomSpeed;
+
+            // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
+            CameraOrbit.RadiusText.text = "Radius: " + (cameraSpherePos.Radius).ToString("0.##");
+
+            // Convert the coordinates back and associate with the true target origin once again.
+            // Then, save and return the new vector position.
+            CameraPosition = Origin + SphericalToCartesian(cameraSpherePos);
+            return CameraPosition;
+        }
+
+        // Formulae based on the associated wikipedia page
         private static SphericalCoordinates CartesianToSpherical(Vector3 cartesian)
         {
-            SphericalCoordinates sphericalConversion = new SphericalCoordinates(0, 0, 0)
+            SphericalCoordinates sphericalConversion = new SphericalCoordinates(CameraOrbit, 0, 0, 0)
             {
                 Radius = Mathf.Sqrt((cartesian.x * cartesian.x)
                                     + (cartesian.y * cartesian.y)
                                     + (cartesian.z * cartesian.z)),
 
-                Azimuth = Mathf.Atan2(cartesian.z, cartesian.x) // Use Atan2 to retain quadrant information
+                // Use Atan2 to retain quadrant information
+                Azimuth = Mathf.Atan2(cartesian.z, cartesian.x)
             };
             
             sphericalConversion.Elevation = Mathf.Asin(cartesian.y / sphericalConversion.Radius);
@@ -167,7 +180,7 @@ public class CameraOrbitControls : MonoBehaviour
             return cartesian;
         }
 
-        // For debugging purposes
+        // For debugging
         public override string ToString()
         {
             return "Origin: " + Origin + "\n" +
@@ -178,24 +191,35 @@ public class CameraOrbitControls : MonoBehaviour
 
     private class SphericalCoordinates
     {
+        private float radius;
         private float elevation;
         private float azimuth;
 
-        public SphericalCoordinates(float radius, float elevation, float azimuth)
+        public SphericalCoordinates(CameraOrbitControls cameraOrbitControls, float radius, float elevation, float azimuth)
         {
+            CameraOrbit = cameraOrbitControls;
             Radius = radius;
             Elevation = elevation;
             Azimuth = azimuth;
         }
 
-        public float Radius { get; set; }
+        public static CameraOrbitControls CameraOrbit { get; set; } // TODO : May want to remove reference to this
+        public float Radius {
+            get { return radius;  }
+            set
+            {
+                radius = Mathf.Clamp(value, CameraOrbit.RadiusMin, CameraOrbit.RadiusMax);
+            }
+        }
         public float Elevation
         {
             get { return elevation; }
             set
             {
-                // Clamp the elevation values between 0 and pi (180 deg).
-                elevation = Mathf.Clamp(value, 0, Mathf.PI);
+                // Clamp the elevation values between 0 and just under pi/2 (90 deg).
+                // This prevents the angle from ever reaching the very top of the
+                // hemisphere, which causes flickering between azimuth quadrants
+                elevation = Mathf.Clamp(value, 0, Mathf.PI/2 - Mathf.Deg2Rad/2);
             }
         }
         public float Azimuth
@@ -204,7 +228,7 @@ public class CameraOrbitControls : MonoBehaviour
             set
             {
                 // Wrap the azimuth value for continual horizontal rotation
-                // between 0 and 2pi (360 deg).
+                // between 0 and 2 * pi (360 deg)
                 azimuth = Mathf.Repeat(value, 2 * Mathf.PI);
             }
         }
