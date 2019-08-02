@@ -3,26 +3,30 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class PlayPause : MonoBehaviour
+namespace DepthVisor.UI
 {
-    // All icons by Smashicons on flaticon.com
-    [SerializeField] Sprite PlaySprite;
-    [SerializeField] Sprite PauseSprite;
-
-    private bool IsPlaying = false;
-
-    public void PlayPauseRecording()
+    public class PlayPause : MonoBehaviour
     {
-        Debug.Log("Button clicked");
+        // All icons by Smashicons on flaticon.com
+        [SerializeField] Sprite PlaySprite;
+        [SerializeField] Sprite PauseSprite;
 
-        if (IsPlaying)
+        private bool IsPlaying = false;
+
+        public void PlayPauseRecording()
         {
-            IsPlaying = false;
-            gameObject.GetComponent<Image>().sprite = PlaySprite;
-        } else
-        {
-            IsPlaying = true;
-            gameObject.GetComponent<Image>().sprite = PauseSprite;
+            Debug.Log("Button clicked");
+
+            if (IsPlaying)
+            {
+                IsPlaying = false;
+                gameObject.GetComponent<Image>().sprite = PlaySprite;
+            }
+            else
+            {
+                IsPlaying = true;
+                gameObject.GetComponent<Image>().sprite = PauseSprite;
+            }
         }
     }
 }
