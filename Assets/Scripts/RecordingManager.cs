@@ -1,11 +1,10 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 
 using DepthVisor.UI;
+using DepthVisor.Kinect;
 
 namespace DepthVisor.Recording
 {
@@ -13,10 +12,7 @@ namespace DepthVisor.Recording
     {
         [SerializeField] Button RecordingButton;
         [SerializeField] TextMeshProUGUI TimerText;
-        [SerializeField] GameObject KinectMesh;
-
-        private bool isRecording;
-        private KinectRecordingStore recordedData;
+        [SerializeField] GameObject KinectMeshContainer;
 
         // TODO: Serialize the colours to expose in editor
         private Color32 redHighlight = new Color32(245, 0, 0, 255);
@@ -24,16 +20,29 @@ namespace DepthVisor.Recording
         private Color32 whiteHighlight = new Color32(245, 245, 245, 255);
         private Color32 whitePressed = new Color32(200, 200, 200, 255);
 
-        private void Start()
+        private bool isRecording;
+        private KinectRecordingStore recordedData;
+        private KinectMeshGenerator kinectMesh;
+
+        void Start()
         {
+            kinectMesh = KinectMeshContainer.GetComponentInChildren<KinectMeshGenerator>();
+            // recordedData = new KinectRecordingStore();
             isRecording = false;
+        }
+
+        void Update()
+        {
+            if (isRecording)
+            {
+                // recordedData.AddFrame();
+            }
         }
 
         public void ToggleRecording()
         {
             if (isRecording)
             {
-                //KinectMesh // Deactivate recording
                 TimerText.GetComponent<TimerManager>().StopTimer();
 
                 // Deselect the button and switch its colour block back to the normal values
@@ -48,10 +57,11 @@ namespace DepthVisor.Recording
                 Text buttonText = RecordingButton.GetComponentInChildren<Text>();
                 buttonText.text = "Start Recording";
                 buttonText.color = new Color32(50, 50, 50, 255);
+
+                // Kinect Recording Serialize and Save, then reset reference
             }
             else
             {
-                //KinectMesh // Deactivate recording
                 TimerText.GetComponent<TimerManager>().StartTimer();
 
                 // Deselect the button and switch its colour block to the red versions of the normal values

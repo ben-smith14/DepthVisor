@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using TMPro;
 
+using DepthVisor.Kinect;
+
 namespace DepthVisor.UI
 {
     public class CameraOrbitControls : MonoBehaviour
@@ -15,7 +17,7 @@ namespace DepthVisor.UI
         [SerializeField] float RadiusMax = 25f;
 
         [Header("Game Objects")]
-        [SerializeField] GameObject Target;
+        [SerializeField] GameObject MeshTargetContainer;
         [SerializeField] TextMeshProUGUI RadiusText;
         [SerializeField] TextMeshProUGUI AzimuthText;
         [SerializeField] TextMeshProUGUI ElevationText;
@@ -26,14 +28,14 @@ namespace DepthVisor.UI
 
         public void Start()
         {
-            // Initialise the camera hemisphere object at the origin of the target and with the starting radius.
+            // Initialise the camera hemisphere object at the centre of the target mesh and with the starting radius.
             // Then, move the camera to its starting position using the provided elevation and azimuth. Finally,
             // rotate the camera to point at the target.
-            cameraHemisphere = new CameraHemisphere(this, Target.transform.position, StartCameraRadius);
+            cameraHemisphere = new CameraHemisphere(this, MeshTargetContainer.transform.position, StartCameraRadius);
             transform.position = cameraHemisphere.InitialiseCameraPos(Mathf.Deg2Rad * StartCameraElevation, Mathf.Deg2Rad * StartCameraAzimuth);
-            transform.LookAt(Target.transform);
+            transform.LookAt(MeshTargetContainer.transform);
 
-            allowMouseDrag = true; // TODO : DO I NEED TO INITIALISE THIS HERE?
+            allowMouseDrag = true;
         }
 
         public void LateUpdate()
@@ -65,7 +67,7 @@ namespace DepthVisor.UI
             {
                 transform.position = cameraHemisphere.MoveCamera(MoveSpeed, verticalValue, horizontalValue);
                 transform.position = cameraHemisphere.ZoomCamera(ZoomSpeed, zoomAmount); // TODO : Maybe move to another if statement
-                transform.LookAt(Target.transform);
+                transform.LookAt(MeshTargetContainer.transform);
             }
         }
 

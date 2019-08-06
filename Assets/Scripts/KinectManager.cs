@@ -1,25 +1,27 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 using Windows.Kinect;
 
 namespace DepthVisor.Kinect
 {
-    // Largely based on the the MultiSourceManager class from the Kinect SDK Unity package
+    // Based on the the MultiSourceManager class from the Kinect SDK Unity package
     public class KinectManager : MonoBehaviour
     {
         public CoordinateMapper Mapper { get; private set; }
+
         public int ColourFrameWidth { get; private set; }
         public int ColourFrameHeight { get; private set; }
         public Texture2D ColourTexture { get; private set; }
+
         public int DepthFrameWidth { get; private set; }
         public int DepthFrameHeight { get; private set; }
         public ushort[] DepthData { get; private set; }
 
-        public event EventHandler<MultiSourceFrameArrivedEventArgs> NewDataArrived;
-
         private KinectSensor sensor;
         private MultiSourceFrameReader multiSourceReader;
+
         private byte[] colourData;
+        private bool firstFrameArrived;
+        private bool unsubFirstFrameHandler;
 
         void Awake()
         {
@@ -46,16 +48,18 @@ namespace DepthVisor.Kinect
                 DepthFrameWidth = depthFrameDesc.Width;
                 DepthFrameHeight = depthFrameDesc.Height;
 
-                // And also initialise an empty unsigned short array for the depth pixel data
+                // Also initialise an empty unsigned short array for the depth pixel data
                 DepthData = new ushort[depthFrameDesc.LengthInPixels];
 
-                // Finally, before opening the sensor to begin capturing data, add two event handlers to
-                // the multi source frame arrived event. One that will prepare and store the new data in
-                // a better format; another that will trigger a custom new event for other classes to
-                // subscribe to
-                multiSourceReader.MultiSourceFrameArrived += PrepareNewFrameData;
-                multiSourceReader.MultiSourceFrameArrived += TriggerNewDataEvent;
+                // To only perform data processing in the Update method once data is available, subscribe a one-shot
+                // event handler to the frame arrived event in the reader. When this event is triggered for the first
+                // time, this handler will flip a flag to indicate that the first valid frame has arrived and then the
+                // other flag will be used to unsubscribe the handler to prevent further unecessary triggering
+                firstFrameArrived = false;
+                unsubFirstFrameHandler = false;
+                multiSourceReader.MultiSourceFrameArrived += FirstFrameArrived;
 
+                // Finally, open the sensor if it is closed to begin capturing data
                 if (!sensor.IsOpen)
                 {
                     sensor.Open();
@@ -63,20 +67,39 @@ namespace DepthVisor.Kinect
             }
         }
 
-        public bool IsSensorNull()
+        private void FirstFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
         {
-            return sensor == null;
+            firstFrameArrived = true;
         }
 
-        public CoordinateMapper GetCoordinateMapper()
+        void Update()
         {
-            return sensor.CoordinateMapper;
-        }
+            // If the sensor reference does not exist or it is not ready, cancel the update
+            if (!DoesSensorExist() || !IsSensorReady()) { return; }
 
-        private void PrepareNewFrameData(object sender, MultiSourceFrameArrivedEventArgs e)
-        {
-            // TODO : DO I NEED TO UPDATE THE FRAME DIMENSIONS EVERYTIME?
-            MultiSourceFrame newMultiFrame = e.FrameReference.AcquireFrame();
+            // Otherwise, if the first frame is yet to arrive, flip the unsubscribe first frame flag if
+            // not already true to indicate that the event handler will need to be unsubscribed when it
+            // does arrive
+            if (!firstFrameArrived)
+            {
+                if (!unsubFirstFrameHandler)
+                {
+                    unsubFirstFrameHandler = true;
+                }
+
+                return;
+            } else if (firstFrameArrived && unsubFirstFrameHandler)
+            {
+                // If the first frame has arrived and the unsubscribe first frame flag is still true,
+                // unsubscribe the handler to prevent unecessary future triggers and flip the flag back
+                // to false to skip over this condition in the future
+                multiSourceReader.MultiSourceFrameArrived -= FirstFrameArrived;
+                unsubFirstFrameHandler = false;
+            }
+
+            // If all above checks have passed, the current frame of incoming data can be processed and
+            // made available to other classes
+            MultiSourceFrame newMultiFrame = multiSourceReader.AcquireLatestFrame();
             if (newMultiFrame != null)
             {
                 ColorFrame colourFrame = newMultiFrame.ColorFrameReference.AcquireFrame();
@@ -85,7 +108,7 @@ namespace DepthVisor.Kinect
                     DepthFrame depthFrame = newMultiFrame.DepthFrameReference.AcquireFrame();
                     if (depthFrame != null)
                     {
-                        // If all frames are available, first generate the 2D texture from the current
+                        // If all frame references are valid, first generate the 2D texture from the current
                         // colour image by copying the frame pixel data into the byte array. Then, load
                         // this into the texture and apply the changes to render them
                         colourFrame.CopyConvertedFrameDataToArray(colourData, ColorImageFormat.Rgba);
@@ -109,20 +132,24 @@ namespace DepthVisor.Kinect
             }
         }
 
-        private void TriggerNewDataEvent(object sender, MultiSourceFrameArrivedEventArgs e)
+        public bool DoesSensorExist()
         {
-            // Trigger the custom event to notify all subscribers by instantiating it if
-            // it is not null (i.e. if it has any subscribers)
-            EventHandler<MultiSourceFrameArrivedEventArgs> triggerEvent = NewDataArrived;
-            if (triggerEvent != null)
-            {
-                NewDataArrived(this, e);
-            }
+            return sensor != null;
         }
 
-        // Dereference the sensor and reader on application quit, also
-        // explicitly disposing of the reader and closing the sensor as
-        // well
+        public bool IsSensorReady()
+        {
+            return sensor.IsAvailable;
+        }
+
+        public bool IsDataAvailable()
+        {
+            return firstFrameArrived;
+        }
+
+        // Dereference the sensor, mapper and reader on application quit,
+        // also explicitly disposing of the reader and closing the sensor
+        // as well
         void OnApplicationQuit()
         {
             if (multiSourceReader != null)

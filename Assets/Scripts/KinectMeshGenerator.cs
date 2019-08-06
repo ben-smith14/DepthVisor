@@ -1,65 +1,96 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using Windows.Kinect;
-
-// TODO : TEST REMOVAL OF TRIANGLE GENERATION FROM START METHOD
+using TMPro;
 
 namespace DepthVisor.Kinect
 {
     public class KinectMeshGenerator : MonoBehaviour
     {
-        [SerializeField] GameObject SensorMessage;
-        [Range(2.0f, 25.0f)] [SerializeField] float EdgeThreshold = 10.0f;
+        [Header("Sensor UI Message")]
+        [SerializeField] GameObject SensorMessageContainer;
+        [SerializeField] string NoSensorMessage;
+        [SerializeField] string InitSensorMessage;
 
+        [Header("Mesh Params")]
+        [Range(2.0f, 25.0f)] [SerializeField] float TriEdgeThreshold = 10.0f;
+        [Range(0.0f, 0.5f)] [SerializeField] float DepthScale = 0.1f;
+
+        private enum MeshState
+        {
+            NoSensor,
+            InitialisingMesh,
+            AwaitingData,
+            RenderingMesh
+        }
+
+        // Kinect SDK indicates that downsampling only works at a value of 4 and
+        // the recommended operational distances are from the Kinect V2 specs
+        private const int downsampleSize = 4;
+        private const int depthMinReliableDistance = 500;
+        private const int depthMaxReliableDistance = 4500;
+
+        private MeshState currentMeshState;
         private KinectManager kinectManager;
+        private Renderer meshRenderer;
         private Mesh mesh;
         private Vector3[] vertices;
         private Vector2[] uv;
         private List<int> thresholdTris;
 
-        // Kinect SDK indicates that downsampling only works at a value of 4 and
-        // the recommended operational distances are from the Kinect V2 specs
-        private const int downsampleSize = 4;
-        private const double depthScale = 0.1f; // TODO : WHAT HAPPENS IF I REMOVE THIS?
-        private const int depthMinReliableDistance = 500;
-        private const int depthMaxReliableDistance = 4500;
-
         private bool recordFrames;
 
         void Start()
         {
-            // Retrieve the data manager component
+            // Retrieve the data manager component and the mesh renderer
             kinectManager = gameObject.GetComponent<KinectManager>();
+            meshRenderer = gameObject.GetComponent<Renderer>();
 
-            // Proceed with initialisation if the sensor reference is valid
-            if (!kinectManager.IsSensorNull())
+            // Show the sensor message and hide the mesh renderer until the mesh
+            // is ready to display
+            SensorMessageContainer.SetActive(true);
+            meshRenderer.enabled = false;
+
+            // Proceed with initialisation if the sensor reference exists
+            if (kinectManager.DoesSensorExist())
             {
-                // Hide the no sensor message
-                SensorMessage.SetActive(false);
+                // Set the mesh state and the sensor message to indicate that the system is initialising
+                currentMeshState = MeshState.InitialisingMesh;
+                SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = InitSensorMessage;
 
-                // Initialise a downsampled mesh to lower the resolution
-                InitialiseMesh(kinectManager.DepthFrameWidth / downsampleSize, kinectManager.DepthFrameHeight / downsampleSize);
+                // Initialise an empty downsampled mesh as a 2D plane with the correct height and width
+                // attributes that match the Kinect images
+                InitialiseMeshData();
 
-                // Add the event handler that will update the mesh with new data from the Kinect
-                // to the event in the data manager class that is triggered when new data arrives
-                kinectManager.NewDataArrived += UpdateNewMeshData;
-            } else
+                // Align the centre of the mesh to its parent container origin
+                AlignMeshToWorldOrigin();
+            }
+            else
             {
-                // Otherwise, show the no sensor message
-                SensorMessage.SetActive(true);
+                // Otherwise, set the mesh state and the sensor message to indicate that no sensor was found
+                currentMeshState = MeshState.NoSensor;
+                SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorMessage;
             }
         }
 
-        void InitialiseMesh(int meshWidth, int meshHeight)
+        void InitialiseMeshData()
         {
+            // Use downsampled width and height to lower the resolution and reduce data size for processing 
+            // and storage
+            int meshWidth = kinectManager.DepthFrameWidth / downsampleSize;
+            int meshHeight = kinectManager.DepthFrameHeight / downsampleSize;
+
             // Create a new mesh object and set it as the component for the game object
             mesh = new Mesh();
             GetComponent<MeshFilter>().mesh = mesh;
 
-            // Initialise the data structure arrays for the mesh
+            // Initialise the data structures for the mesh and use a temporary triangles
+            // array, which won't be filtered for edge length at this stage
             vertices = new Vector3[meshWidth * meshHeight];
             uv = new Vector2[meshWidth * meshHeight];
+            int[] triangles = new int[6 * (meshWidth - 1) * (meshHeight - 1)];
 
+            int triangleIndex = 0;
             for (int y = 0; y < meshHeight; y++)
             {
                 for (int x = 0; x < meshWidth; x++)
@@ -73,43 +104,112 @@ namespace DepthVisor.Kinect
                     // the mesh in the correct orientation and normalising the UV coordinates
                     vertices[index] = new Vector3(x, -y, 0);
                     uv[index] = new Vector2(x / meshWidth, y / meshHeight);
+
+                    // Fill the triangles array using the index position of the vertices that make up
+                    // each of their corners to initialise the whole grid
+                    if (x != (meshWidth - 1) && y != (meshHeight - 1))
+                    {
+                        int topLeft = index;
+                        int topRight = topLeft + 1;
+                        int bottomLeft = topLeft + meshWidth;
+                        int bottomRight = bottomLeft + 1;
+
+                        triangles[triangleIndex++] = topLeft;
+                        triangles[triangleIndex++] = topRight;
+                        triangles[triangleIndex++] = bottomLeft;
+
+                        triangles[triangleIndex++] = bottomLeft;
+                        triangles[triangleIndex++] = topRight;
+                        triangles[triangleIndex++] = bottomRight;
+                    }
                 }
             }
 
-            // Load in the new data to the mesh object and recalculate normals to ensure lighting
+            // Load in the data to the mesh object and recalculate normals to ensure lighting
             // and shading is correct
             mesh.vertices = vertices;
             mesh.uv = uv;
+            mesh.triangles = triangles;
             mesh.RecalculateNormals();
-
-            // TODO : PROBABLY NEED TO DO THIS AT LEAST ONCE IN REFRESH DATA AS WELL
-
-            // TODO : Use bounds centre to align the mesh to centre of world space?
-            Vector3 meshCentre = mesh.bounds.center;
-            gameObject.transform.position = -meshCentre;
-
-            // also use bounds extent to align bottom of the mesh with the floor?
-            Vector3 meshExtents = mesh.bounds.extents;
-            gameObject.transform.position += new Vector3(0, meshExtents.y, 0);
-
-            // could also use bounds to prevent the camera from getting to close to the mesh?
         }
 
-        private void UpdateNewMeshData(object sender, MultiSourceFrameArrivedEventArgs e)
+        private void AlignMeshToWorldOrigin()
         {
-            // If the sensor is disconnected or there is no reference to a CoordinateMapper,
-            // return and display the no sensor message
-            if (kinectManager.IsSensorNull() || kinectManager.Mapper == null)
+            // Based on the Kinect parameters, depth scale and downsampling value, we can
+            // first establish the centre of the mesh in in its local space
+            Vector3 meshLocalCentre = new Vector3(0, 0, 0)
             {
-                SensorMessage.SetActive(true);
+                x = (kinectManager.DepthFrameWidth / downsampleSize) / 2,
+                y = -(kinectManager.DepthFrameHeight / downsampleSize) / 2,
+                z = (depthMaxReliableDistance - depthMinReliableDistance) * DepthScale / 2
+            };
+
+            // Then, we can adjust for the minimum reliable distance that the Kinect can gather
+            // data from, as the mesh is slightly offset from its actual origin by this amount
+            meshLocalCentre += new Vector3(0, 0, depthMinReliableDistance * DepthScale);
+
+            // Finally, we can move the game object origin back to the world origin and then
+            // align its centre with the world origin by adding the local centre vector to this
+            gameObject.transform.position -= (gameObject.transform.position + meshLocalCentre);
+        }
+
+        void Update()
+        {
+            // If the sensor reference does not exist or the sensor is not ready, set the mesh state and
+            // display the appropriate sensor message
+            if (!kinectManager.DoesSensorExist())
+            {
+                if (currentMeshState != MeshState.NoSensor)
+                {
+                    currentMeshState = MeshState.NoSensor;
+                    SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorMessage;
+                }
+
+                return;
+            } else if (!kinectManager.IsSensorReady())
+            {
+                if (currentMeshState != MeshState.AwaitingData)
+                {
+                    currentMeshState = MeshState.AwaitingData;
+                }
+
                 return;
             }
 
-            // Otherwise, retrieve the current color texture from the data manager and assign it
-            // to the main texture of the mesh material. Then, refresh the mesh data with the new
-            // depth data to reflect changes in the scene
-            gameObject.GetComponent<Renderer>().material.mainTexture = kinectManager.ColourTexture;
-            RefreshDepthData(kinectManager.DepthData);
+            // If the conditions above pass, use the kinect manager to identify if it is receiving data
+            // from the hardware
+            bool dataAvailable = kinectManager.IsDataAvailable();
+            if (!dataAvailable)
+            {
+                // If not, change the state to indicate that it is awaiting data
+                if (currentMeshState != MeshState.AwaitingData)
+                {
+                    currentMeshState = MeshState.AwaitingData;
+                }
+
+                return;
+            }
+            else if (SensorMessageContainer.activeSelf)
+            {
+                // Otherwise, if it is receiving data and the sensor message is still visible, check the
+                // previous state. If the system is awaiting data, indicate that it can now begin rendering,
+                // hide the sensor message and enable the mesh renderer
+                if (currentMeshState == MeshState.AwaitingData)
+                {
+                    currentMeshState = MeshState.RenderingMesh;
+                    SensorMessageContainer.SetActive(false);
+
+                    if (!meshRenderer.enabled) { meshRenderer.enabled = true; }
+                }
+            }
+
+            // Retrieve the current color texture from the data manager and assign it to the main texture
+            // of the mesh material. Then, refresh the mesh data with the new depth data to reflect changes
+            // in the scene
+            meshRenderer.material.mainTexture = kinectManager.ColourTexture;
+            RefreshDepthData();
+
+            // TODO : Could also use bounds to prevent the camera from getting to close to the mesh?
 
             // Save the current data frames (MIGHT NEED TO DO IN REFRESH SO THAT THE
             // IMAGES ARE ALIGNED)
@@ -119,8 +219,11 @@ namespace DepthVisor.Kinect
             //}
         }
 
-        private void RefreshDepthData(ushort[] depthData)
+        private void RefreshDepthData()
         {
+            // Get the new depth data from the manager
+            ushort[] depthData = kinectManager.DepthData;
+
             // Initialise an array of colour space points that is the same size as the
             // incoming depth data array
             ColorSpacePoint[] colorSpace = new ColorSpacePoint[depthData.Length];
@@ -152,10 +255,11 @@ namespace DepthVisor.Kinect
                     int smallIndex = (indexY * (kinectManager.DepthFrameWidth / downsampleSize)) + indexX;
 
                     // Find the average value of the actual depth points within the current downsampling
-                    // region to get a single average depth value. Then scale this value and assign it
-                    // to the Z parameter of the next vertex to set its position in the mesh
+                    // region to get a single average depth value. Then scale this value down to reduce the
+                    // maximum depth of the mesh and assign it to the Z parameter of the next vertex to set
+                    // its position in the mesh
                     double avg = GetAvg(depthData, x, y, kinectManager.DepthFrameWidth);
-                    avg *= depthScale; // TODO : WHAT IF I REMOVE THIS?
+                    avg *= DepthScale;
                     vertices[smallIndex].z = (float)avg;
 
                     // Update the UV mapping by finding the corresponding ColorSpacePoint for the current
@@ -187,7 +291,7 @@ namespace DepthVisor.Kinect
 
                         // If all edges of the first triangle in the quad are less than or equal to the threshold
                         // value, add the triangle to the list (define points clockwise to prevent back face culling!)
-                        if (quadEdges[0] <= EdgeThreshold && quadEdges[1] <= EdgeThreshold && quadEdges[2] <= EdgeThreshold)
+                        if (quadEdges[0] <= TriEdgeThreshold && quadEdges[1] <= TriEdgeThreshold && quadEdges[2] <= TriEdgeThreshold)
                         {
                             // Add triangle using top left corner index, top right and bottom left
                             thresholdTris.Add(triTopLeftIndex);
@@ -196,7 +300,7 @@ namespace DepthVisor.Kinect
                         }
 
                         // Do the same for the second triangle in the quad
-                        if (quadEdges[1] <= EdgeThreshold && quadEdges[3] <= EdgeThreshold && quadEdges[4] <= EdgeThreshold)
+                        if (quadEdges[1] <= TriEdgeThreshold && quadEdges[3] <= TriEdgeThreshold && quadEdges[4] <= TriEdgeThreshold)
                         {
                             // Add triangle using bottom left corner index, top right and bottom right
                             thresholdTris.Add(smallIndex - 1);
@@ -209,18 +313,11 @@ namespace DepthVisor.Kinect
 
             // Load in the new data to the mesh, converting the triangle list to
             // an array of points
+            mesh.Clear();
             mesh.vertices = vertices;
             mesh.uv = uv;
             mesh.triangles = thresholdTris.ToArray();
             mesh.RecalculateNormals();
-
-            // TODO : Use bounds centre to align the mesh to centre of world space?
-            Vector3 meshCentre = mesh.bounds.center;
-            gameObject.transform.position = -meshCentre;
-
-            // also use bounds extent to align bottom of the mesh with the floor?
-            Vector3 meshExtents = mesh.bounds.extents;
-            gameObject.transform.position += new Vector3(0, meshExtents.y, 0);
         }
 
         private double GetAvg(ushort[] depthData, int x, int y, int width)
@@ -257,6 +354,7 @@ namespace DepthVisor.Kinect
             return sum / (downsampleSize * downsampleSize);
         }
 
+        // TODO : Move to recording manager class
         public void ToggleRecording(bool isRecording)
         {
             // TODO : Toggle recording to match the input and instantiate new singleton of recording object if
