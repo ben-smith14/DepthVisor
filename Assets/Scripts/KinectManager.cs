@@ -25,9 +25,9 @@ namespace DepthVisor.Kinect
 
         void Awake()
         {
-            // Establish a connection to the Kinect before generating a mesh
+            // Establish a connection with the connect sensor
             sensor = KinectSensor.GetDefault();
-            if (sensor != null)
+            if (DoesSensorExist())
             {
                 // Open a frame reader for the colour and depth data; then store a reference to the coordinate mapper
                 multiSourceReader = sensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Depth);
@@ -40,8 +40,8 @@ namespace DepthVisor.Kinect
 
                 // Initialise an empty 2D texture based on these dimensions and an empty byte array for the
                 // actual pixel data
-                ColourTexture = new Texture2D(ColourFrameWidth, ColourFrameHeight, TextureFormat.RGBA32, false);
                 colourData = new byte[colorFrameDesc.BytesPerPixel * colorFrameDesc.LengthInPixels];
+                ColourTexture = new Texture2D(ColourFrameWidth, ColourFrameHeight, TextureFormat.RGBA32, false);
 
                 // Do the same for the depth frames
                 FrameDescription depthFrameDesc = sensor.DepthFrameSource.FrameDescription;
@@ -75,7 +75,11 @@ namespace DepthVisor.Kinect
         void Update()
         {
             // If the sensor reference does not exist or it is not ready, cancel the update
-            if (!DoesSensorExist() || !IsSensorReady()) { return; }
+            if (!DoesSensorExist() || !IsSensorReady())
+            {
+                firstFrameArrived = false;
+                return;
+            }
 
             // Otherwise, if the first frame is yet to arrive, flip the unsubscribe first frame flag if
             // not already true to indicate that the event handler will need to be unsubscribed when it

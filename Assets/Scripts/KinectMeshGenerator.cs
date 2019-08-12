@@ -5,12 +5,13 @@ using TMPro;
 
 namespace DepthVisor.Kinect
 {
+    // Based on the DepthSourceView class from the Kinect SDK Unity package
     public class KinectMeshGenerator : MonoBehaviour
     {
-        [Header("Sensor UI Message")]
-        [SerializeField] GameObject SensorMessageContainer;
-        [SerializeField] string NoSensorMessage;
-        [SerializeField] string InitSensorMessage;
+        [Header("View Status UI Message")]
+        [SerializeField] GameObject ViewStatusContainer;
+        [SerializeField] string NoSensorText;
+        [SerializeField] string InitMeshText;
 
         [Header("Mesh Params")]
         [Range(2.0f, 25.0f)] [SerializeField] float TriEdgeThreshold = 10.0f;
@@ -26,7 +27,7 @@ namespace DepthVisor.Kinect
 
         // Kinect SDK indicates that downsampling only works at a value of 4 and
         // the recommended operational distances are from the Kinect V2 specs
-        private const int downsampleSize = 4;
+        private const int downSampleSize = 4;
         private const int depthMinReliableDistance = 500;
         private const int depthMaxReliableDistance = 4500;
 
@@ -38,17 +39,15 @@ namespace DepthVisor.Kinect
         private Vector2[] uv;
         private List<int> thresholdTris;
 
-        private bool recordFrames;
-
         void Start()
         {
-            // Retrieve the data manager component and the mesh renderer
+            // Retrieve the data manager component and a reference to the mesh renderer
             kinectManager = gameObject.GetComponent<KinectManager>();
             meshRenderer = gameObject.GetComponent<Renderer>();
 
-            // Show the sensor message and hide the mesh renderer until the mesh
+            // Show the view status message and hide the mesh renderer until the mesh
             // is ready to display
-            SensorMessageContainer.SetActive(true);
+            ViewStatusContainer.SetActive(true);
             meshRenderer.enabled = false;
 
             // Proceed with initialisation if the sensor reference exists
@@ -56,20 +55,21 @@ namespace DepthVisor.Kinect
             {
                 // Set the mesh state and the sensor message to indicate that the system is initialising
                 currentMeshState = MeshState.InitialisingMesh;
-                SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = InitSensorMessage;
+                ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = InitMeshText;
 
                 // Initialise an empty downsampled mesh as a 2D plane with the correct height and width
                 // attributes that match the Kinect images
                 InitialiseMeshData();
 
-                // Align the centre of the mesh to its parent container origin
+                // Align the centre of the mesh to its parent container origin, which by default is world
+                // space
                 AlignMeshToWorldOrigin();
             }
             else
             {
                 // Otherwise, set the mesh state and the sensor message to indicate that no sensor was found
                 currentMeshState = MeshState.NoSensor;
-                SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorMessage;
+                ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorText;
             }
         }
 
@@ -77,8 +77,8 @@ namespace DepthVisor.Kinect
         {
             // Use downsampled width and height to lower the resolution and reduce data size for processing 
             // and storage
-            int meshWidth = kinectManager.DepthFrameWidth / downsampleSize;
-            int meshHeight = kinectManager.DepthFrameHeight / downsampleSize;
+            int meshWidth = kinectManager.DepthFrameWidth / downSampleSize;
+            int meshHeight = kinectManager.DepthFrameHeight / downSampleSize;
 
             // Create a new mesh object and set it as the component for the game object
             mesh = new Mesh();
@@ -139,8 +139,8 @@ namespace DepthVisor.Kinect
             // first establish the centre of the mesh in in its local space
             Vector3 meshLocalCentre = new Vector3(0, 0, 0)
             {
-                x = (kinectManager.DepthFrameWidth / downsampleSize) / 2,
-                y = -(kinectManager.DepthFrameHeight / downsampleSize) / 2,
+                x = (kinectManager.DepthFrameWidth / downSampleSize) / 2,
+                y = -(kinectManager.DepthFrameHeight / downSampleSize) / 2,
                 z = (depthMaxReliableDistance - depthMinReliableDistance) * DepthScale / 2
             };
 
@@ -150,6 +150,7 @@ namespace DepthVisor.Kinect
 
             // Finally, we can move the game object origin back to the world origin and then
             // align its centre with the world origin by adding the local centre vector to this
+            // translation
             gameObject.transform.position -= (gameObject.transform.position + meshLocalCentre);
         }
 
@@ -162,7 +163,7 @@ namespace DepthVisor.Kinect
                 if (currentMeshState != MeshState.NoSensor)
                 {
                     currentMeshState = MeshState.NoSensor;
-                    SensorMessageContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorMessage;
+                    ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorText;
                 }
 
                 return;
@@ -189,7 +190,7 @@ namespace DepthVisor.Kinect
 
                 return;
             }
-            else if (SensorMessageContainer.activeSelf)
+            else if (ViewStatusContainer.activeSelf)
             {
                 // Otherwise, if it is receiving data and the sensor message is still visible, check the
                 // previous state. If the system is awaiting data, indicate that it can now begin rendering,
@@ -197,7 +198,7 @@ namespace DepthVisor.Kinect
                 if (currentMeshState == MeshState.AwaitingData)
                 {
                     currentMeshState = MeshState.RenderingMesh;
-                    SensorMessageContainer.SetActive(false);
+                    ViewStatusContainer.SetActive(false);
 
                     if (!meshRenderer.enabled) { meshRenderer.enabled = true; }
                 }
@@ -238,7 +239,7 @@ namespace DepthVisor.Kinect
             thresholdTris = new List<int>();
 
             // For each set of downsampled pixel rows:
-            for (int y = 0; y < kinectManager.DepthFrameHeight; y += downsampleSize)
+            for (int y = 0; y < kinectManager.DepthFrameHeight; y += downSampleSize)
             {
                 // Define a vector3 array for storing quad corners and a float array for storing
                 // quad edges
@@ -246,18 +247,18 @@ namespace DepthVisor.Kinect
                 float[] quadEdges = new float[5];
 
                 // Then, for each set of downsampled pixels across each row:
-                for (int x = 0; x < kinectManager.DepthFrameWidth; x += downsampleSize)
+                for (int x = 0; x < kinectManager.DepthFrameWidth; x += downSampleSize)
                 {
                     // Get the downsampled x and y indices and then get the downsampled array index
                     // using these values
-                    int indexX = x / downsampleSize;
-                    int indexY = y / downsampleSize;
-                    int smallIndex = (indexY * (kinectManager.DepthFrameWidth / downsampleSize)) + indexX;
+                    int indexX = x / downSampleSize;
+                    int indexY = y / downSampleSize;
+                    int smallIndex = (indexY * (kinectManager.DepthFrameWidth / downSampleSize)) + indexX;
 
                     // Find the average value of the actual depth points within the current downsampling
-                    // region to get a single average depth value. Then scale this value down to reduce the
-                    // maximum depth of the mesh and assign it to the Z parameter of the next vertex to set
-                    // its position in the mesh
+                    // region to get a single average depth value. Then, scale this value down to reduce the
+                    // size of the mesh in the scene view and assign the current value to the Z parameter of
+                    // the next vertex to set its position in the mesh
                     double avg = GetAvg(depthData, x, y, kinectManager.DepthFrameWidth);
                     avg *= DepthScale;
                     vertices[smallIndex].z = (float)avg;
@@ -273,7 +274,7 @@ namespace DepthVisor.Kinect
                     {
                         // Get the small index of the top left corner of the quad, as the actual small index
                         // is currently on the bottom right
-                        int triTopLeftIndex = smallIndex - 1 - (kinectManager.DepthFrameWidth / downsampleSize);
+                        int triTopLeftIndex = smallIndex - 1 - (kinectManager.DepthFrameWidth / downSampleSize);
 
                         // Get each of the vectors that make up the corners of the quad
                         quadCorners[0] = vertices[triTopLeftIndex]; // top left
@@ -290,7 +291,7 @@ namespace DepthVisor.Kinect
                         quadEdges[4] = Vector3.Distance(quadCorners[3], quadCorners[2]); // bottom
 
                         // If all edges of the first triangle in the quad are less than or equal to the threshold
-                        // value, add the triangle to the list (define points clockwise to prevent back face culling!)
+                        // value, add the triangle to the list (define points clockwise to prevent back face culling)
                         if (quadEdges[0] <= TriEdgeThreshold && quadEdges[1] <= TriEdgeThreshold && quadEdges[2] <= TriEdgeThreshold)
                         {
                             // Add triangle using top left corner index, top right and bottom left
@@ -312,7 +313,7 @@ namespace DepthVisor.Kinect
             }
 
             // Load in the new data to the mesh, converting the triangle list to
-            // an array of points
+            // an array of vertex indices
             mesh.Clear();
             mesh.vertices = vertices;
             mesh.uv = uv;
@@ -326,9 +327,9 @@ namespace DepthVisor.Kinect
 
             // Iterate through all of the original depth points in the current
             // downsampling region
-            for (int y1 = y; y1 < y + downsampleSize; y1++)
+            for (int y1 = y; y1 < y + downSampleSize; y1++)
             {
-                for (int x1 = x; x1 < x + downsampleSize; x1++)
+                for (int x1 = x; x1 < x + downSampleSize; x1++)
                 {
                     // Get the next non-downsampled index position
                     int fullIndex = (y1 * width) + x1;
@@ -338,7 +339,7 @@ namespace DepthVisor.Kinect
                     // for this sample
                     if (depthData[fullIndex] == 0)
                     {
-                        sum += depthMaxReliableDistance;
+                        sum += depthMaxReliableDistance; // TODO : Experiment with changing this
                     }
                     else
                     {
@@ -351,19 +352,17 @@ namespace DepthVisor.Kinect
 
             // Return an average of all of the depth values to get a single
             // downsampled value for the given region
-            return sum / (downsampleSize * downsampleSize);
+            return sum / (downSampleSize * downSampleSize);
         }
 
-        // TODO : Move to recording manager class
-        public void ToggleRecording(bool isRecording)
+        internal Vector3[] ReadVertices()
         {
-            // TODO : Toggle recording to match the input and instantiate new singleton of recording object if
-            // beginning a new recording.
+            return vertices;
         }
 
-        private void RecordCurrentFrame(Vector3[] meshVertices, Vector2[] uvMap, Texture2D colorTexture)
+        internal Vector2[] ReadUvs()
         {
-            // TODO : Add the input data as a frame to the singleton storage object (use a struct in the recording object class).
+            return uv;
         }
     }
 }

@@ -1,8 +1,6 @@
 ﻿using UnityEngine;
 using TMPro;
 
-using DepthVisor.Kinect;
-
 namespace DepthVisor.UI
 {
     public class CameraOrbitControls : MonoBehaviour
@@ -16,7 +14,7 @@ namespace DepthVisor.UI
         [SerializeField] float RadiusMin = 5f;
         [SerializeField] float RadiusMax = 25f;
 
-        [Header("Game Objects")]
+        [Header("Associated Scene Objects")]
         [SerializeField] GameObject MeshTargetContainer;
         [SerializeField] TextMeshProUGUI RadiusText;
         [SerializeField] TextMeshProUGUI AzimuthText;
@@ -24,17 +22,19 @@ namespace DepthVisor.UI
 
         [System.NonSerialized]
         public bool allowMouseDrag;
+
         private CameraHemisphere cameraHemisphere;
 
         public void Start()
         {
-            // Initialise the camera hemisphere object at the centre of the target mesh and with the starting radius.
-            // Then, move the camera to its starting position using the provided elevation and azimuth. Finally,
-            // rotate the camera to point at the target.
+            // Initialise the camera hemisphere object at the centre of the target mesh container and with the
+            // starting radius. Then, move the camera to its starting position using the provided elevation and
+            // azimuth. Finally, rotate the camera to point at the target
             cameraHemisphere = new CameraHemisphere(this, MeshTargetContainer.transform.position, StartCameraRadius);
             transform.position = cameraHemisphere.InitialiseCameraPos(Mathf.Deg2Rad * StartCameraElevation, Mathf.Deg2Rad * StartCameraAzimuth);
             transform.LookAt(MeshTargetContainer.transform);
 
+            // Allow mouse drag to rotate the camera initially
             allowMouseDrag = true;
         }
 
@@ -43,8 +43,8 @@ namespace DepthVisor.UI
             float verticalValue = 0.0f;
             float horizontalValue = 0.0f;
 
-            // If mouse drag is disabled by either the mouse being in the options panel or playback control section,
-            // or the main mouse button is not being held down, only use the arrow keys for movement
+            // If mouse drag is disabled because the mouse is over some core UI controls or the main mouse
+            // button is not being held down, only use the arrow keys for movement
             if (!allowMouseDrag || !Input.GetMouseButton(0))
             {
                 verticalValue = Input.GetAxis("Vertical");
@@ -58,19 +58,28 @@ namespace DepthVisor.UI
                 horizontalValue = -Input.GetAxis("Mouse X");
             }
 
-            // Get the mouse scroll movement and invert again to give forward for zooming in and backwards for
-            // zooming out (TODO : Give option to invert this in options panel??)
+            // Get the mouse scroll movement and invert again to set forward scrolling for zooming in and backwards
+            // scrolling for zooming out
+            // (TODO : Give option to invert this in options panel?)
             float zoomAmount = -Input.mouseScrollDelta.y;
 
-            // If at least one of the values is not equal to 0, move the camera in the desired direction
-            if (verticalValue != 0.0f || horizontalValue != 0.0f || zoomAmount != 0.0f)
+            // If at least one of the movement values is not equal to 0, move the camera in the desired direction
+            if (verticalValue != 0.0f || horizontalValue != 0.0f)
             {
                 transform.position = cameraHemisphere.MoveCamera(MoveSpeed, verticalValue, horizontalValue);
-                transform.position = cameraHemisphere.ZoomCamera(ZoomSpeed, zoomAmount); // TODO : Maybe move to another if statement
+                transform.LookAt(MeshTargetContainer.transform);
+            }
+
+            // If the zoom amount is not equal to zero, also adjust the camera radius
+            if (zoomAmount != 0.0f)
+            {
+                transform.position = cameraHemisphere.ZoomCamera(ZoomSpeed, zoomAmount);
                 transform.LookAt(MeshTargetContainer.transform);
             }
         }
 
+        // Exposed methods to be used as event triggers for when the mouse is entering or
+        // exiting core UI controls
         public void MouseDragEnabled()
         {
             allowMouseDrag = true;
@@ -81,6 +90,8 @@ namespace DepthVisor.UI
             allowMouseDrag = false;
         }
 
+        // The class that represents the camera hemisphere and is responsible for changing and storing
+        // the camera's current position on that hemisphere
         private class CameraHemisphere
         {
             public static CameraOrbitControls CameraOrbit { get; private set; }
@@ -90,26 +101,28 @@ namespace DepthVisor.UI
 
             public CameraHemisphere(CameraOrbitControls cameraOrbitControls, Vector3 origin, float radius)
             {
+                // Set static reference to parent object, as nested classes do not have access
+                // to parent member variables by default in C#
                 CameraOrbit = cameraOrbitControls;
+
                 Origin = origin;
                 Radius = radius;
 
-                // Set the initial camera position on creation to the edge of the sphere
-                // around the target object
+                // Set the initial camera position on creation of the hemisphere to its edge
                 CameraPosition = Origin + new Vector3(0f, 0f, radius);
             }
 
             public Vector3 InitialiseCameraPos(float elevation, float azimuth)
             {
                 // Set the initial elevation and azimuth of the camera. Start by converting its vector
-                // position to spherical coordinates, moving it to the global origin for this.
+                // position to spherical coordinates, moving it to the global origin for this
                 SphericalCoordinates cameraSpherePos = CartesianToSpherical(CameraPosition - Origin);
 
                 // Then add the elevation and azimuth angles (in radians) to the coordinates.
                 cameraSpherePos.Elevation += elevation;
                 cameraSpherePos.Azimuth += azimuth;
 
-                // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
+                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
                 CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
                 CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
 
@@ -125,10 +138,12 @@ namespace DepthVisor.UI
                 // global origin
                 SphericalCoordinates cameraSpherePos = CartesianToSpherical(CameraPosition - Origin);
 
+                // Add the vertical and horizontal movement amounts to the relevant angles, adjusting
+                // them using the serialized move speed and delta time
                 cameraSpherePos.Elevation += verticalMove * Time.deltaTime * moveSpeed;
                 cameraSpherePos.Azimuth += horizontalMove * Time.deltaTime * moveSpeed;
 
-                // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
+                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
                 CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
                 CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
 
@@ -144,9 +159,11 @@ namespace DepthVisor.UI
                 // global origin
                 SphericalCoordinates cameraSpherePos = CartesianToSpherical(CameraPosition - Origin);
 
+                // Add the zoom movement to the radius, again adjusting it using the zoom speed
+                // and delta time
                 cameraSpherePos.Radius += zoomAmount * Time.deltaTime * zoomSpeed;
 
-                // DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
+                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
                 CameraOrbit.RadiusText.text = "Radius: " + (cameraSpherePos.Radius).ToString("0.##");
 
                 // Convert the coordinates back and associate with the true target origin once again.
@@ -155,10 +172,11 @@ namespace DepthVisor.UI
                 return CameraPosition;
             }
 
-            // Formulae based on the associated wikipedia page
+            // Formulae for converting between cartesian and spherical coordinate systems, adjusted
+            // for the Unity world space coordinate frame
             private static SphericalCoordinates CartesianToSpherical(Vector3 cartesian)
             {
-                SphericalCoordinates sphericalConversion = new SphericalCoordinates(CameraOrbit, 0, 0, 0)
+                SphericalCoordinates sphericalConversion = new SphericalCoordinates(0, 0, 0, CameraOrbit.RadiusMin, CameraOrbit.RadiusMax)
                 {
                     Radius = Mathf.Sqrt((cartesian.x * cartesian.x)
                                         + (cartesian.y * cartesian.y)
@@ -173,6 +191,8 @@ namespace DepthVisor.UI
                 return sphericalConversion;
             }
 
+            // Formulae for converting back to cartesian coordinates from spherical, again adjusted for
+            // the Unity world space coordinate frame
             private static Vector3 SphericalToCartesian(SphericalCoordinates spherical)
             {
                 Vector3 cartesian = new Vector3(0, 0, 0)
@@ -181,6 +201,7 @@ namespace DepthVisor.UI
                     y = spherical.Radius * Mathf.Sin(spherical.Elevation),
                     z = spherical.Radius * Mathf.Cos(spherical.Elevation) * Mathf.Sin(spherical.Azimuth)
                 };
+
                 return cartesian;
             }
 
@@ -193,19 +214,24 @@ namespace DepthVisor.UI
             }
         }
 
+        // The class that acts as a store for spherical coordinates in a similar way
+        // to the Vector3 class for cartesian coordinates
         private class SphericalCoordinates
         {
-            public static CameraOrbitControls CameraOrbit { get; private set; } // TODO : May want to remove reference to this
             private float radius;
             private float elevation;
             private float azimuth;
 
-            public SphericalCoordinates(CameraOrbitControls cameraOrbitControls, float radius, float elevation, float azimuth)
+            private float RadiusMin { get; set; }
+            private float RadiusMax { get; set; }
+
+            public SphericalCoordinates(float radius, float elevation, float azimuth, float radiusMin, float radiusMax)
             {
-                CameraOrbit = cameraOrbitControls;
                 Radius = radius;
                 Elevation = elevation;
                 Azimuth = azimuth;
+                RadiusMin = radiusMin;
+                RadiusMax = radiusMax;
             }
 
             public float Radius
@@ -213,9 +239,11 @@ namespace DepthVisor.UI
                 get { return radius; }
                 set
                 {
-                    radius = Mathf.Clamp(value, CameraOrbit.RadiusMin, CameraOrbit.RadiusMax);
+                    // Clamp the radius between the input min and max values
+                    radius = Mathf.Clamp(value, RadiusMin, RadiusMax);
                 }
             }
+
             public float Elevation
             {
                 get { return elevation; }
@@ -227,6 +255,7 @@ namespace DepthVisor.UI
                     elevation = Mathf.Clamp(value, 0, Mathf.PI / 2 - Mathf.Deg2Rad / 2);
                 }
             }
+
             public float Azimuth
             {
                 get { return azimuth; }
