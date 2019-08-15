@@ -1,4 +1,6 @@
 ﻿using UnityEngine;
+using UnityEngine.SceneManagement;
+
 using Windows.Kinect;
 
 namespace DepthVisor.Kinect
@@ -21,7 +23,7 @@ namespace DepthVisor.Kinect
 
         private byte[] colourData;
         private bool firstFrameArrived;
-        private bool unsubFirstFrameHandler;
+        private bool subscribedFrameHandler;
 
         void Awake()
         {
@@ -52,53 +54,50 @@ namespace DepthVisor.Kinect
                 DepthData = new ushort[depthFrameDesc.LengthInPixels];
 
                 // To only perform data processing in the Update method once data is available, subscribe a one-shot
-                // event handler to the frame arrived event in the reader. When this event is triggered for the first
-                // time, this handler will flip a flag to indicate that the first valid frame has arrived and then the
-                // other flag will be used to unsubscribe the handler to prevent further unecessary triggering
+                // event handler to the frame arrived event in the reader that will unsubscribe itself once triggered.
+                // When this event is triggered, the handler will flip a flag to indicate that the first valid frame
+                // has arrived. The other flag is then used to keep track of if the handler is currently subscribed to
+                // the event or not
                 firstFrameArrived = false;
-                unsubFirstFrameHandler = false;
-                multiSourceReader.MultiSourceFrameArrived += FirstFrameArrived;
+                multiSourceReader.MultiSourceFrameArrived += FirstFrameArrivedHandler;
+                subscribedFrameHandler = true;
 
-                // Finally, open the sensor if it is closed to begin capturing data
+                // Open the sensor if it is closed to begin capturing data
                 if (!sensor.IsOpen)
                 {
                     sensor.Open();
                 }
-            }
-        }
 
-        private void FirstFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
-        {
-            firstFrameArrived = true;
+                // Finally, add a handler to the scene unloaded event to close all Kinect resources when the scene
+                // is changed
+                SceneManager.sceneUnloaded += SceneUnloadedHandler;
+            }
         }
 
         void Update()
         {
-            // If the sensor reference does not exist or it is not ready, cancel the update
+            // If the sensor reference does not exist or it is not ready, ensure that the frame
+            // arrived flags are reset and then cancel the update
             if (!DoesSensorExist() || !IsSensorReady())
             {
-                firstFrameArrived = false;
+                // If the frame handler is not already subscribed to the frame arrived event, do
+                // this and then flip the flag
+                if (!subscribedFrameHandler)
+                {
+                    multiSourceReader.MultiSourceFrameArrived += FirstFrameArrivedHandler;
+                    subscribedFrameHandler = true;
+                }
+
+                if (firstFrameArrived) { firstFrameArrived = false; }
+
                 return;
             }
 
-            // Otherwise, if the first frame is yet to arrive, flip the unsubscribe first frame flag if
-            // not already true to indicate that the event handler will need to be unsubscribed when it
-            // does arrive
+            // Otherwise, if the sensor is available and ready but the first frame is yet to arrive,
+            // simply return until it has arrived
             if (!firstFrameArrived)
             {
-                if (!unsubFirstFrameHandler)
-                {
-                    unsubFirstFrameHandler = true;
-                }
-
                 return;
-            } else if (firstFrameArrived && unsubFirstFrameHandler)
-            {
-                // If the first frame has arrived and the unsubscribe first frame flag is still true,
-                // unsubscribe the handler to prevent unecessary future triggers and flip the flag back
-                // to false to skip over this condition in the future
-                multiSourceReader.MultiSourceFrameArrived -= FirstFrameArrived;
-                unsubFirstFrameHandler = false;
             }
 
             // If all above checks have passed, the current frame of incoming data can be processed and
@@ -136,6 +135,11 @@ namespace DepthVisor.Kinect
             }
         }
 
+        void OnApplicationQuit()
+        {
+            CloseResources();
+        }
+
         public bool DoesSensorExist()
         {
             return sensor != null;
@@ -151,14 +155,40 @@ namespace DepthVisor.Kinect
             return firstFrameArrived;
         }
 
-        // Dereference the sensor, mapper and reader on application quit,
-        // also explicitly disposing of the reader and closing the sensor
-        // as well
-        void OnApplicationQuit()
+        private void FirstFrameArrivedHandler(object sender, MultiSourceFrameArrivedEventArgs e)
         {
+            firstFrameArrived = true;
+
+            // Unsubscribe itself from the event and then flip the flag in this class to indicate
+            // that it is no longer subscribed
+            ((MultiSourceFrameReader)sender).MultiSourceFrameArrived -= FirstFrameArrivedHandler;
+            subscribedFrameHandler = false;
+        }
+
+        private void SceneUnloadedHandler(Scene currentScene)
+        {
+            // Close Kinect resources and remove the handler from the event
+            CloseResources();
+            SceneManager.sceneUnloaded -= SceneUnloadedHandler;
+        }
+
+        // Explicitly dereference the sensor, mapper and reader, also disposing of
+        // the reader if it has been initialised and closing the sensor as well
+        private void CloseResources()
+        {
+            // If no Kinect has ever been available, the dispose method on the reader
+            // can throw an exception if it has not been initialised, so catch this
             if (multiSourceReader != null)
             {
-                multiSourceReader.Dispose();
+                try
+                {
+                    multiSourceReader.Dispose();
+                }
+                catch (System.InvalidOperationException e)
+                {
+                    Debug.LogException(e, this); // TODO: Better error handling?
+                }
+
                 multiSourceReader = null;
             }
 

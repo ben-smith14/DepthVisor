@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using TMPro;
 
 namespace DepthVisor.UI
 {
@@ -14,18 +13,13 @@ namespace DepthVisor.UI
         [SerializeField] float RadiusMin = 5f;
         [SerializeField] float RadiusMax = 25f;
 
-        [Header("Associated Scene Objects")]
-        [SerializeField] GameObject MeshTargetContainer;
-        [SerializeField] TextMeshProUGUI RadiusText;
-        [SerializeField] TextMeshProUGUI AzimuthText;
-        [SerializeField] TextMeshProUGUI ElevationText;
-
-        [System.NonSerialized]
-        public bool allowMouseDrag;
+        [Header("Target Object")]
+        [SerializeField] GameObject MeshTargetContainer;      
 
         private CameraHemisphere cameraHemisphere;
+        private bool allowMouseMovement;
 
-        public void Start()
+        void Start()
         {
             // Initialise the camera hemisphere object at the centre of the target mesh container and with the
             // starting radius. Then, move the camera to its starting position using the provided elevation and
@@ -35,17 +29,17 @@ namespace DepthVisor.UI
             transform.LookAt(MeshTargetContainer.transform);
 
             // Allow mouse drag to rotate the camera initially
-            allowMouseDrag = true;
+            allowMouseMovement = true;
         }
 
-        public void LateUpdate()
+        void LateUpdate()
         {
             float verticalValue = 0.0f;
             float horizontalValue = 0.0f;
 
             // If mouse drag is disabled because the mouse is over some core UI controls or the main mouse
             // button is not being held down, only use the arrow keys for movement
-            if (!allowMouseDrag || !Input.GetMouseButton(0))
+            if (!allowMouseMovement || !Input.GetMouseButton(0))
             {
                 verticalValue = Input.GetAxis("Vertical");
                 horizontalValue = Input.GetAxis("Horizontal");
@@ -70,8 +64,8 @@ namespace DepthVisor.UI
                 transform.LookAt(MeshTargetContainer.transform);
             }
 
-            // If the zoom amount is not equal to zero, also adjust the camera radius
-            if (zoomAmount != 0.0f)
+            // If mouse movement is allowed and the zoom amount is not equal to zero, also adjust the camera radius
+            if (allowMouseMovement && zoomAmount != 0.0f)
             {
                 transform.position = cameraHemisphere.ZoomCamera(ZoomSpeed, zoomAmount);
                 transform.LookAt(MeshTargetContainer.transform);
@@ -80,14 +74,14 @@ namespace DepthVisor.UI
 
         // Exposed methods to be used as event triggers for when the mouse is entering or
         // exiting core UI controls
-        public void MouseDragEnabled()
+        public void MouseMovementEnabled()
         {
-            allowMouseDrag = true;
+            allowMouseMovement = true;
         }
 
-        public void MouseDragDisabled()
+        public void MouseMovementDisabled()
         {
-            allowMouseDrag = false;
+            allowMouseMovement = false;
         }
 
         // The class that represents the camera hemisphere and is responsible for changing and storing
@@ -95,15 +89,19 @@ namespace DepthVisor.UI
         private class CameraHemisphere
         {
             public static CameraOrbitControls CameraOrbit { get; private set; }
+
             public Vector3 Origin { get; private set; }
             public float Radius { get; private set; }
             public Vector3 CameraPosition { get; private set; }
 
             public CameraHemisphere(CameraOrbitControls cameraOrbitControls, Vector3 origin, float radius)
             {
-                // Set static reference to parent object, as nested classes do not have access
-                // to parent member variables by default in C#
-                CameraOrbit = cameraOrbitControls;
+                // Store a static reference to the outer parent class if it doesn't already exist, as nested
+                // classes in C# cannot access the member variables of their outer parent class otherwise
+                if (CameraOrbit == null)
+                {
+                    CameraOrbit = cameraOrbitControls;
+                }
 
                 Origin = origin;
                 Radius = radius;
@@ -122,10 +120,6 @@ namespace DepthVisor.UI
                 cameraSpherePos.Elevation += elevation;
                 cameraSpherePos.Azimuth += azimuth;
 
-                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
-                CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
-                CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
-
                 // Finally, convert the spherical coordinates back to cartesian, move back to the correct
                 // position with regards to the target and store the new position, also returning this vector.
                 CameraPosition = Origin + SphericalToCartesian(cameraSpherePos);
@@ -143,10 +137,6 @@ namespace DepthVisor.UI
                 cameraSpherePos.Elevation += verticalMove * Time.deltaTime * moveSpeed;
                 cameraSpherePos.Azimuth += horizontalMove * Time.deltaTime * moveSpeed;
 
-                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
-                CameraOrbit.AzimuthText.text = "Azimuth: " + (cameraSpherePos.Azimuth * Mathf.Rad2Deg).ToString("0.##") + " deg";
-                CameraOrbit.ElevationText.text = "Elevation: " + (cameraSpherePos.Elevation * Mathf.Rad2Deg).ToString("0.##") + " deg";
-
                 // Convert the coordinates back and associate with the true target origin once again.
                 // Then, save and return the new vector position.
                 CameraPosition = Origin + SphericalToCartesian(cameraSpherePos);
@@ -162,9 +152,6 @@ namespace DepthVisor.UI
                 // Add the zoom movement to the radius, again adjusting it using the zoom speed
                 // and delta time
                 cameraSpherePos.Radius += zoomAmount * Time.deltaTime * zoomSpeed;
-
-                // TODO : DELETE AND ALSO DELETE REFERENCE TO OUTER CLASS THAT IS PASSED IN
-                CameraOrbit.RadiusText.text = "Radius: " + (cameraSpherePos.Radius).ToString("0.##");
 
                 // Convert the coordinates back and associate with the true target origin once again.
                 // Then, save and return the new vector position.

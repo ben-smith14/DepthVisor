@@ -1,24 +1,27 @@
 ﻿using System.Collections.Generic;
+
 using UnityEngine;
-using Windows.Kinect;
 using TMPro;
+
+using Windows.Kinect;
 
 namespace DepthVisor.Kinect
 {
     // Based on the DepthSourceView class from the Kinect SDK Unity package
     public class KinectMeshGenerator : MonoBehaviour
     {
-        [Header("View Status UI Message")]
-        [SerializeField] GameObject ViewStatusContainer;
+        [Header("Mesh Status UI Message")]
+        [SerializeField] GameObject MeshStatusTextContainer;
         [SerializeField] string NoSensorText;
-        [SerializeField] string InitMeshText;
 
-        [Header("Mesh Params")]
+        [Header("Mesh Parameters")]
+        [Range(2.0f, 20.0f)] [SerializeField] float KinectMaxNotAvailable = 10.0f;
         [Range(2.0f, 25.0f)] [SerializeField] float TriEdgeThreshold = 10.0f;
         [Range(0.0f, 0.5f)] [SerializeField] float DepthScale = 0.1f;
 
         private enum MeshState
         {
+            StartingUp,
             NoSensor,
             InitialisingMesh,
             AwaitingData,
@@ -39,23 +42,28 @@ namespace DepthVisor.Kinect
         private Vector2[] uv;
         private List<int> thresholdTris;
 
+        private TextMeshProUGUI meshStatusText;
+        private string meshStatusDefaultText;
+        private float kinectAvailableTimer;
+
         void Start()
         {
             // Retrieve the data manager component and a reference to the mesh renderer
             kinectManager = gameObject.GetComponent<KinectManager>();
             meshRenderer = gameObject.GetComponent<Renderer>();
 
-            // Show the view status message and hide the mesh renderer until the mesh
-            // is ready to display
-            ViewStatusContainer.SetActive(true);
+            // Store the a reference to the mesh status text and its default value. Then, show
+            // the view status message and hide the mesh renderer until the mesh is ready to display
+            meshStatusText = MeshStatusTextContainer.GetComponentInChildren<TextMeshProUGUI>();
+            meshStatusDefaultText = meshStatusText.text;
+            MeshStatusTextContainer.SetActive(true);
             meshRenderer.enabled = false;
 
             // Proceed with initialisation if the sensor reference exists
             if (kinectManager.DoesSensorExist())
             {
-                // Set the mesh state and the sensor message to indicate that the system is initialising
-                currentMeshState = MeshState.InitialisingMesh;
-                ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = InitMeshText;
+                // Set the mesh state to initialising mesh
+                SetMeshState(MeshState.InitialisingMesh);
 
                 // Initialise an empty downsampled mesh as a 2D plane with the correct height and width
                 // attributes that match the Kinect images
@@ -67,13 +75,84 @@ namespace DepthVisor.Kinect
             }
             else
             {
-                // Otherwise, set the mesh state and the sensor message to indicate that no sensor was found
-                currentMeshState = MeshState.NoSensor;
-                ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorText;
+                // Otherwise, set the mesh state to the no sensor state
+                SetMeshState(MeshState.NoSensor);
             }
+
+            kinectAvailableTimer = 0.0f;
         }
 
-        void InitialiseMeshData()
+        void Update()
+        {
+            // If the sensor reference does not exist, set the mesh state to no sensor
+            if (!kinectManager.DoesSensorExist())
+            {
+                SetMeshState(MeshState.NoSensor);
+                return;
+            }
+            else if (!kinectManager.IsSensorReady())
+            {
+                // If the sensor is not yet available, first check for how long it hasn't
+                // been available
+                if (kinectAvailableTimer > KinectMaxNotAvailable)
+                {
+                    // If it has been unavailable longer than the max, set the state to
+                    // no sensor and return whilst it is still not available
+                    SetMeshState(MeshState.NoSensor);
+                    return;
+                }
+
+                // Otherwise, if the max not available time has not yet been reached, set
+                // the mesh state to awaiting data and keep adding to the timer
+                SetMeshState(MeshState.AwaitingData);
+                kinectAvailableTimer += Time.deltaTime;
+                return;
+            }
+            else
+            {
+                // Otherwise, if the kinect available timer has been counting for some
+                // time but the sensor is now available, reset it back to 0
+                if (kinectAvailableTimer != 0.0f)
+                {
+                    kinectAvailableTimer = 0.0f;
+                }
+            }
+
+            // If the conditions above pass, use the kinect manager to identify if it is receiving data
+            // from the hardware yet or not
+            bool dataAvailable = kinectManager.IsDataAvailable();
+            if (!dataAvailable)
+            {
+                // If not, change the state to indicate that it is awaiting data if it hasn't already
+                // been set and return
+                SetMeshState(MeshState.AwaitingData);
+                return;
+            }
+            else if (!meshRenderer.enabled)
+            {
+                // Otherwise, if it is receiving data and the renderer is not enabled, the state has just
+                // changed, so reflect this in the system
+                SetMeshState(MeshState.RenderingMesh);
+            }
+
+            // Retrieve the current color texture from the data manager and assign it to the main texture
+            // of the mesh material. Then, refresh the mesh data with the new depth data to reflect changes
+            // in the scene
+            meshRenderer.material.mainTexture = kinectManager.ColourTexture;
+            RefreshDepthData();
+        }
+
+        internal Vector3[] GetMeshVertices()
+        {
+            return vertices;
+        }
+
+        internal Vector2[] GetMeshUvs()
+        {
+            return uv;
+        }
+
+        private void InitialiseMeshData()
         {
             // Use downsampled width and height to lower the resolution and reduce data size for processing 
             // and storage
@@ -152,72 +231,8 @@ namespace DepthVisor.Kinect
             // align its centre with the world origin by adding the local centre vector to this
             // translation
             gameObject.transform.position -= (gameObject.transform.position + meshLocalCentre);
-        }
-
-        void Update()
-        {
-            // If the sensor reference does not exist or the sensor is not ready, set the mesh state and
-            // display the appropriate sensor message
-            if (!kinectManager.DoesSensorExist())
-            {
-                if (currentMeshState != MeshState.NoSensor)
-                {
-                    currentMeshState = MeshState.NoSensor;
-                    ViewStatusContainer.GetComponentInChildren<TextMeshProUGUI>().text = NoSensorText;
-                }
-
-                return;
-            } else if (!kinectManager.IsSensorReady())
-            {
-                if (currentMeshState != MeshState.AwaitingData)
-                {
-                    currentMeshState = MeshState.AwaitingData;
-                }
-
-                return;
-            }
-
-            // If the conditions above pass, use the kinect manager to identify if it is receiving data
-            // from the hardware
-            bool dataAvailable = kinectManager.IsDataAvailable();
-            if (!dataAvailable)
-            {
-                // If not, change the state to indicate that it is awaiting data
-                if (currentMeshState != MeshState.AwaitingData)
-                {
-                    currentMeshState = MeshState.AwaitingData;
-                }
-
-                return;
-            }
-            else if (ViewStatusContainer.activeSelf)
-            {
-                // Otherwise, if it is receiving data and the sensor message is still visible, check the
-                // previous state. If the system is awaiting data, indicate that it can now begin rendering,
-                // hide the sensor message and enable the mesh renderer
-                if (currentMeshState == MeshState.AwaitingData)
-                {
-                    currentMeshState = MeshState.RenderingMesh;
-                    ViewStatusContainer.SetActive(false);
-
-                    if (!meshRenderer.enabled) { meshRenderer.enabled = true; }
-                }
-            }
-
-            // Retrieve the current color texture from the data manager and assign it to the main texture
-            // of the mesh material. Then, refresh the mesh data with the new depth data to reflect changes
-            // in the scene
-            meshRenderer.material.mainTexture = kinectManager.ColourTexture;
-            RefreshDepthData();
 
             // TODO : Could also use bounds to prevent the camera from getting to close to the mesh?
-
-            // Save the current data frames (MIGHT NEED TO DO IN REFRESH SO THAT THE
-            // IMAGES ARE ALIGNED)
-            //if (recordFrames)
-            //{
-            //    RecordCurrentFrame(mesh.vertices, mesh.uv, colorView);
-            //}
         }
 
         private void RefreshDepthData()
@@ -355,14 +370,42 @@ namespace DepthVisor.Kinect
             return sum / (downSampleSize * downSampleSize);
         }
 
-        internal Vector3[] ReadVertices()
+        private void SetMeshState(MeshState newState)
         {
-            return vertices;
-        }
+            // If the mesh state has not changed, return
+            if (currentMeshState == newState)
+            {
+                return;
+            }
 
-        internal Vector2[] ReadUvs()
-        {
-            return uv;
+            // Otherwise, make changes to the UI based on the new state
+            switch (newState)
+            {
+                // For the no sensor state, show the placeholder plane, then set the mesh status text and
+                // display it if not already visible
+                case MeshState.NoSensor:
+                    meshStatusText.text = NoSensorText;
+                    meshStatusText.color = Color.red;
+                    if (!MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(true); }
+                    break;
+                // For the initialising mesh and awaiting data states, show the placeholder plane again, then
+                // set the mesh status message text back to its default and display its container if not already
+                // visible
+                case MeshState.InitialisingMesh:
+                case MeshState.AwaitingData:
+                    meshStatusText.text = meshStatusDefaultText;
+                    if (!MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(true); }
+                    break;
+                // For the rendering mesh state, hide the placeholder plane and the mesh status text if visible,
+                // then enable the mesh renderer if not visible
+                case MeshState.RenderingMesh:
+                    if (MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(false); }
+                    if (!meshRenderer.enabled) { meshRenderer.enabled = true; }
+                    break;
+            }
+
+            // Store the new state
+            currentMeshState = newState;
         }
     }
 }
