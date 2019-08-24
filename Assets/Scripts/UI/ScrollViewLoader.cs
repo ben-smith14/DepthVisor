@@ -3,17 +3,17 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-using DepthVisor.Recording;
+using DepthVisor.FileStorage;
 
 namespace DepthVisor.UI
 {
     public class ScrollViewLoader : MonoBehaviour
     {
-        [SerializeField] FileSystemManager fileManager;
-        [SerializeField] GameObject NoFilesPrefab;
-        [SerializeField] GameObject FileItemPrefab;
+        [SerializeField] protected FileSystem fileManager = null;
+        [SerializeField] protected GameObject NoFilesPrefab = null;
+        [SerializeField] protected GameObject FileItemPrefab = null;
 
-        public void LoadFileNames()
+        public virtual void LoadFileNames()
         {
             // Clear all existing children if any
             ClearCurrentContent();
@@ -41,7 +41,7 @@ namespace DepthVisor.UI
             }
         }
 
-        public void ClearCurrentContent()
+        public virtual void ClearCurrentContent()
         {
             // Clear all child objects from the scroll view content parent
             foreach (Transform child in gameObject.transform)

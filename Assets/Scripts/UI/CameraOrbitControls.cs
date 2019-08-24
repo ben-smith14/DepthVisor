@@ -14,7 +14,7 @@ namespace DepthVisor.UI
         [SerializeField] float RadiusMax = 25f;
 
         [Header("Target Object")]
-        [SerializeField] GameObject MeshTargetContainer;      
+        [SerializeField] GameObject MeshTargetContainer = null;
 
         private CameraHemisphere cameraHemisphere;
         private bool allowMouseMovement;

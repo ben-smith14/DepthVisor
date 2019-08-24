@@ -16,9 +16,9 @@ namespace DepthVisor.UI
     public class MainMenuManager : MonoBehaviour
     {
         [Header("Main Menu Buttons")]
-        [SerializeField] Button RecordingButton;
-        [SerializeField] Button PlaybackButton;
-        [SerializeField] Button SavePathButton;
+        [SerializeField] Button RecordingButton = null;
+        [SerializeField] Button PlaybackButton = null;
+        [SerializeField] Button SavePathButton = null;
 
         private const string emptySavePath = "empty";
         private const string setSavePathText = "Set Save Path";

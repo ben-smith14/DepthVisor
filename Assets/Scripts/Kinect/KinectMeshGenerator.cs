@@ -11,13 +11,22 @@ namespace DepthVisor.Kinect
     public class KinectMeshGenerator : MonoBehaviour
     {
         [Header("Mesh Status UI Message")]
-        [SerializeField] GameObject MeshStatusTextContainer;
-        [SerializeField] string NoSensorText;
+        [SerializeField] GameObject MeshStatusTextContainer = null;
+        [SerializeField] string NoSensorText = "No Kinect Sensor found";
 
         [Header("Mesh Parameters")]
         [Range(2.0f, 20.0f)] [SerializeField] float KinectMaxNotAvailable = 10.0f;
         [Range(2.0f, 25.0f)] [SerializeField] float TriEdgeThreshold = 10.0f;
-        [Range(0.0f, 0.5f)] [SerializeField] float DepthScale = 0.1f;
+
+        // Kinect V2 recommended operational distances are from the specs
+        public const short DepthMinReliableDistance = 500;
+        public const short DepthMaxReliableDistance = 4500;
+
+        // Kinect SDK indicates that downsampling only works at a value of 4
+        public const short DownSampleSize = 4;
+
+        // Depth scale will stretch or compress the mesh in the z direction
+        public const float DepthScale = 0.1f;
 
         private enum MeshState
         {
@@ -27,12 +36,6 @@ namespace DepthVisor.Kinect
             AwaitingData,
             RenderingMesh
         }
-
-        // Kinect SDK indicates that downsampling only works at a value of 4 and
-        // the recommended operational distances are from the Kinect V2 specs
-        private const int downSampleSize = 4;
-        private const int depthMinReliableDistance = 500;
-        private const int depthMaxReliableDistance = 4500;
 
         private MeshState currentMeshState;
         private KinectManager kinectManager;
@@ -156,8 +159,8 @@ namespace DepthVisor.Kinect
         {
             // Use downsampled width and height to lower the resolution and reduce data size for processing 
             // and storage
-            int meshWidth = kinectManager.DepthFrameWidth / downSampleSize;
-            int meshHeight = kinectManager.DepthFrameHeight / downSampleSize;
+            int meshWidth = kinectManager.DepthFrameWidth / DownSampleSize;
+            int meshHeight = kinectManager.DepthFrameHeight / DownSampleSize;
 
             // Create a new mesh object and set it as the component for the game object
             mesh = new Mesh();
@@ -218,21 +221,19 @@ namespace DepthVisor.Kinect
             // first establish the centre of the mesh in in its local space
             Vector3 meshLocalCentre = new Vector3(0, 0, 0)
             {
-                x = (kinectManager.DepthFrameWidth / downSampleSize) / 2,
-                y = -(kinectManager.DepthFrameHeight / downSampleSize) / 2,
-                z = (depthMaxReliableDistance - depthMinReliableDistance) * DepthScale / 2
+                x = (kinectManager.DepthFrameWidth / DownSampleSize) / 2,
+                y = -(kinectManager.DepthFrameHeight / DownSampleSize) / 2,
+                z = (DepthMaxReliableDistance - DepthMinReliableDistance) * DepthScale / 2
             };
 
             // Then, we can adjust for the minimum reliable distance that the Kinect can gather
             // data from, as the mesh is slightly offset from its actual origin by this amount
-            meshLocalCentre += new Vector3(0, 0, depthMinReliableDistance * DepthScale);
+            meshLocalCentre += new Vector3(0, 0, DepthMinReliableDistance * DepthScale);
 
             // Finally, we can move the game object origin back to the world origin and then
             // align its centre with the world origin by adding the local centre vector to this
             // translation
             gameObject.transform.position -= (gameObject.transform.position + meshLocalCentre);
-
-            // TODO : Could also use bounds to prevent the camera from getting to close to the mesh?
         }
 
         private void RefreshDepthData()
@@ -254,7 +255,7 @@ namespace DepthVisor.Kinect
             thresholdTris = new List<int>();
 
             // For each set of downsampled pixel rows:
-            for (int y = 0; y < kinectManager.DepthFrameHeight; y += downSampleSize)
+            for (int y = 0; y < kinectManager.DepthFrameHeight; y += DownSampleSize)
             {
                 // Define a vector3 array for storing quad corners and a float array for storing
                 // quad edges
@@ -262,13 +263,13 @@ namespace DepthVisor.Kinect
                 float[] quadEdges = new float[5];
 
                 // Then, for each set of downsampled pixels across each row:
-                for (int x = 0; x < kinectManager.DepthFrameWidth; x += downSampleSize)
+                for (int x = 0; x < kinectManager.DepthFrameWidth; x += DownSampleSize)
                 {
                     // Get the downsampled x and y indices and then get the downsampled array index
                     // using these values
-                    int indexX = x / downSampleSize;
-                    int indexY = y / downSampleSize;
-                    int smallIndex = (indexY * (kinectManager.DepthFrameWidth / downSampleSize)) + indexX;
+                    int indexX = x / DownSampleSize;
+                    int indexY = y / DownSampleSize;
+                    int smallIndex = (indexY * (kinectManager.DepthFrameWidth / DownSampleSize)) + indexX;
 
                     // Find the average value of the actual depth points within the current downsampling
                     // region to get a single average depth value. Then, scale this value down to reduce the
@@ -289,7 +290,7 @@ namespace DepthVisor.Kinect
                     {
                         // Get the small index of the top left corner of the quad, as the actual small index
                         // is currently on the bottom right
-                        int triTopLeftIndex = smallIndex - 1 - (kinectManager.DepthFrameWidth / downSampleSize);
+                        int triTopLeftIndex = smallIndex - 1 - (kinectManager.DepthFrameWidth / DownSampleSize);
 
                         // Get each of the vectors that make up the corners of the quad
                         quadCorners[0] = vertices[triTopLeftIndex]; // top left
@@ -342,9 +343,9 @@ namespace DepthVisor.Kinect
 
             // Iterate through all of the original depth points in the current
             // downsampling region
-            for (int y1 = y; y1 < y + downSampleSize; y1++)
+            for (int y1 = y; y1 < y + DownSampleSize; y1++)
             {
-                for (int x1 = x; x1 < x + downSampleSize; x1++)
+                for (int x1 = x; x1 < x + DownSampleSize; x1++)
                 {
                     // Get the next non-downsampled index position
                     int fullIndex = (y1 * width) + x1;
@@ -354,7 +355,7 @@ namespace DepthVisor.Kinect
                     // for this sample
                     if (depthData[fullIndex] == 0)
                     {
-                        sum += depthMaxReliableDistance; // TODO : Experiment with changing this
+                        sum += DepthMaxReliableDistance; // TODO : Experiment with changing this
                     }
                     else
                     {
@@ -367,7 +368,7 @@ namespace DepthVisor.Kinect
 
             // Return an average of all of the depth values to get a single
             // downsampled value for the given region
-            return sum / (downSampleSize * downSampleSize);
+            return sum / (DownSampleSize * DownSampleSize);
         }
 
         private void SetMeshState(MeshState newState)
@@ -396,7 +397,7 @@ namespace DepthVisor.Kinect
                     meshStatusText.text = meshStatusDefaultText;
                     if (!MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(true); }
                     break;
-                // For the rendering mesh state, hide the placeholder plane and the mesh status text if visible,
+                // For the rendering mesh state, hide the mesh status message if visible,
                 // then enable the mesh renderer if not visible
                 case MeshState.RenderingMesh:
                     if (MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(false); }

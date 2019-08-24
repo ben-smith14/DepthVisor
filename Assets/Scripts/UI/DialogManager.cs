@@ -9,21 +9,24 @@ namespace DepthVisor.UI
     public class DialogManager : MonoBehaviour
     {
         [Header("Dialog Components")]
-        [SerializeField] TextMeshProUGUI DialogText;
-        [SerializeField] Button CloseButton;
-        [SerializeField] Button ConfirmButton;
-        [SerializeField] Button CancelButton;
+        [SerializeField] TextMeshProUGUI DialogText = null;
+        [SerializeField] Button ConfirmButton = null;
+        [SerializeField] Button CancelButton = null;
 
         public event EventHandler<DialogClosedEventArgs> DialogClosed;
         private CanvasGroup mainCanvasGroup;
 
-        public void InitialiseDialog(string message)
+        public void InitialiseDialog(string message, string confirmText = "Confirm", string cancelText = "Cancel")
         {
-            // Hide the dialog when first created, get a reference to the main canvas group of its
-            // parent canvas that contains all of the other UI elements and set the message
+            // Hide the dialog when first created and get a reference to the main canvas group of
+            // its parent that contains all of the other UI elements
             gameObject.SetActive(false);
             mainCanvasGroup = gameObject.transform.parent.GetComponentInChildren<CanvasGroup>();
+
+            // Set the dialog message and set the text of the confirm and cancel buttons
             DialogText.text = message;
+            ConfirmButton.GetComponentInChildren<TextMeshProUGUI>().text = confirmText;
+            CancelButton.GetComponentInChildren<TextMeshProUGUI>().text = cancelText;
         }
 
         public void ShowDialog()
