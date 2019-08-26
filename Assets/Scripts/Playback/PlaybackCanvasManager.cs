@@ -80,6 +80,7 @@ namespace DepthVisor.Playback
         private string currentOpenFileName;
         private int totalDataItems;
         private int remainingDataItems;
+        private bool fileInfoReady;
 
         void Start()
         {
@@ -114,6 +115,13 @@ namespace DepthVisor.Playback
             {
                 // Change the state to indicate that the file is opening
                 SetPlaybackState(PlaybackState.OpeningFileInfo);
+            }
+            else if (currentPlaybackState == PlaybackState.OpeningFileInfo && fileInfoReady)
+            {
+                // If the file info is ready but the state has not transitioned, perform
+                // the state change
+                loadingManager.Progress();
+                SetPlaybackState(PlaybackState.OpeningFileData);
             }
             else if (currentPlaybackState == PlaybackState.OpeningFileData)
             { 
@@ -169,8 +177,7 @@ namespace DepthVisor.Playback
         public void OpenFile()
         {
             currentOpenFileName = FileList.GetSelectedFileName();
-            Debug.Log(currentOpenFileName);
-            //SetPlaybackState(PlaybackState.OpeningFileInfo);
+            SetPlaybackState(PlaybackState.OpeningFileInfo);
         }
 
         public void CloseOptionsPanel()
@@ -199,8 +206,9 @@ namespace DepthVisor.Playback
 
         private void FileInfoLoadedHandler(object sender, EventArgs e)
         {
-            loadingManager.Progress();
-            SetPlaybackState(PlaybackState.OpeningFileData);
+            // Flip the file info ready flag once the handler is triggered from the playback
+            // manager
+            fileInfoReady = true;
         }
 
         private void SetPlaybackState(PlaybackState newState)
@@ -249,6 +257,9 @@ namespace DepthVisor.Playback
                     // it in the canvas
                     loadingManager.InitialiseLoading(loadingFileInfoMessage, 1);
                     loadingManager.ShowLoading();
+
+                    // Finally, set the file info ready flag to false
+                    fileInfoReady = false;
                     break;
                 // If the file info has been loaded in and chunk data is now being loaded in, disable all UI
                 // controls whilst this happens

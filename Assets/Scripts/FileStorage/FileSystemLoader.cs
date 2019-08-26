@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.IO.Compression;
 using System.Text;
 using System.Runtime.Serialization.Formatters.Binary;
 
@@ -23,14 +22,12 @@ namespace DepthVisor.FileStorage
                 throw new FileNotFoundException("Could not find the specified file");
             }
 
-            Debug.Log("Starting retrieval of footer info");
-
             // Open the recording file, move the position in the stream to the head of the last long value
             // in the file and read it back using a binary reader. Then, use its value to set the position
             // of the file stream to the head of the compressed info footer and read this back into a byte
             // array
-            byte[] fileInfoCompressed;
             FileInfo fileInfo;
+            byte[] fileInfoCompressed;
             using (FileStream fileStream = new FileStream(GetFullFilePath(fileName), FileMode.Open))
             {
                 try
@@ -56,8 +53,6 @@ namespace DepthVisor.FileStorage
                     }
                 }
 
-                Debug.Log("Footer size: " + footerSize);
-
                 try
                 {
                     fileStream.Seek(-(sizeof(long) + footerSize), SeekOrigin.End);
@@ -71,52 +66,45 @@ namespace DepthVisor.FileStorage
                 fileStream.Read(fileInfoCompressed, 0, fileInfoCompressed.Length);
             }
 
-            Debug.Log("Got footer info");
-
-            // Using a binary formatter, memory stream and gzip stream, write this byte array onto the memory stream and
-            // then decompress and deserialize it into a file info object. Store a reference to this in the manager and
-            // then return this reference
+            // Using a binary formatter, memory stream and the quick lz class, decompress the byte array and write
+            // it to the memory stream. Then, use this to deserialize the file info object, storing a reference to
+            // it and then returning this
             BinaryFormatter formatter = new BinaryFormatter();
             using (MemoryStream memoryStream = new MemoryStream())
             {
-                memoryStream.Write(fileInfoCompressed, 0, fileInfoCompressed.Length);
-                using (GZipStream decompressStream = new GZipStream(memoryStream, CompressionMode.Decompress))
-                {
-                    // TODO : Bug here where it can't deserialize the footer
-                    fileInfo = (FileInfo)formatter.Deserialize(decompressStream);
-                }
-            }
+                byte[] decompressedBytes = QuickLZ.decompress(fileInfoCompressed);
 
-            Debug.Log("File info decompressed");
+                memoryStream.Write(decompressedBytes, 0, decompressedBytes.Length);
+                memoryStream.Position = 0;
+
+                fileInfo = (FileInfo)formatter.Deserialize(memoryStream);
+            }
 
             return fileInfo;
         }
 
-        public KinectFramesStore GetChunk(string fileName, float recordingPercentage)
-        {
-            // TODO : Write this
-            return new KinectFramesStore(30);
-        }
-
         public KinectFramesStore DeserializeAndLoadFileChunk(string fileName, long chunkStartPosition, long chunkSize)
         {
+            // Open the requested save file, seek to the starting position of the chunk and read in data
+            // up to the chunk size. Then, decompress this byte array and write it to a memory stream
+            // so that this can be passed to the formatter and deserialized into a frame store object
             KinectFramesStore chunk;
             BinaryFormatter formatter = new BinaryFormatter();
-
             using (MemoryStream memoryStream = new MemoryStream())
             {
                 using (FileStream fileStream = new FileStream(GetFullFilePath(fileName), FileMode.Open))
                 {
-                    fileStream.Seek(chunkStartPosition, SeekOrigin.Begin);
                     byte[] compressedChunk = new byte[chunkSize];
-                    fileStream.Read(compressedChunk, 0, compressedChunk.Length);
-                    memoryStream.Write(compressedChunk, 0, compressedChunk.Length);
 
-                    using (GZipStream decompressionStream = new GZipStream(memoryStream, CompressionMode.Decompress))
-                    {
-                        chunk = (KinectFramesStore)formatter.Deserialize(decompressionStream);
-                    }
+                    fileStream.Seek(chunkStartPosition, SeekOrigin.Begin);
+                    fileStream.Read(compressedChunk, 0, compressedChunk.Length);
+
+                    byte[] decompressedChunk = QuickLZ.decompress(compressedChunk);
+                    memoryStream.Write(decompressedChunk, 0, decompressedChunk.Length);
                 }
+
+                memoryStream.Position = 0;
+                chunk = (KinectFramesStore)formatter.Deserialize(memoryStream);
             }
 
             return chunk;

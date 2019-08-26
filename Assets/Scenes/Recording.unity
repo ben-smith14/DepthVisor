@@ -406,7 +406,7 @@ MonoBehaviour:
   OptionsPanel: {fileID: 1396879921}
   FileNameInput: {fileID: 838529674}
   ErrorText: {fileID: 1702081998}
-  ScrollViewLoader: {fileID: 977887308}
+  FileList: {fileID: 977887308}
   FileNameText: {fileID: 967408868}
   RecordingButtonContainer: {fileID: 160845902}
   RecordingOn:
@@ -1928,7 +1928,7 @@ MonoBehaviour:
   m_StartCorner: 0
   m_StartAxis: 0
   m_CellSize: {x: 280, y: 50}
-  m_Spacing: {x: 0, y: 0}
+  m_Spacing: {x: 0, y: 10}
   m_Constraint: 0
   m_ConstraintCount: 2
 --- !u!114 &977887307
@@ -2584,7 +2584,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -240, y: -104.999985}
+  m_AnchoredPosition: {x: -240, y: -105}
   m_SizeDelta: {x: 300, y: -510}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1364402973
@@ -3729,7 +3729,6 @@ MonoBehaviour:
   NoSensorText: No Kinect Device Found
   KinectMaxNotAvailable: 10
   TriEdgeThreshold: 10
-  DepthScale: 0.1
 --- !u!114 &1944736195
 MonoBehaviour:
   m_ObjectHideFlags: 0

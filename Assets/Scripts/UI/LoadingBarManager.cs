@@ -40,9 +40,17 @@ namespace DepthVisor.UI
             // Progress the loading bar by 1 value
             RemainingDataItems--;
 
-            // Update the UI components. As the remaining data items will be decreasing,
-            // take the percentage away from 100 to get the remaining percentage
-            UpdateLoading(100.0f - ((float)RemainingDataItems / totalDataItems * 100.0f));
+            // If the remaining data items are 0, simply update the UI components to
+            // 100%. Otherwise, as the remaining data items will be decreasing, take
+            // the percentage away from 100 to get the remaining percentage
+            if (RemainingDataItems == 0)
+            {
+                UpdateLoading(100.0f);
+            }
+            else
+            {
+                UpdateLoading(100.0f - ((float)RemainingDataItems / totalDataItems * 100.0f));
+            }
         }
 
         public void DestroyLoading()
@@ -53,11 +61,23 @@ namespace DepthVisor.UI
 
         private void UpdateLoading(float percentageComplete)
         {
-            // Validate the input and throw an exception if invalid
-            if (0.0f <= percentageComplete && percentageComplete <= 100.0f)
+            // If the percentage complete is 0 or 100 exactly, set the UI
+            // components manually to avoid any division issues with floats
+            if (percentageComplete == 0.0f)
             {
-                // If valid, set the loading bar value and the percentage text
-                LoadingSlider.value = percentageComplete / 100;
+                LoadingSlider.value = LoadingSlider.minValue;
+                LoadingPercentage.text = "0%";
+            }
+            else if (percentageComplete == 100.0f)
+            {
+                LoadingSlider.value = LoadingSlider.maxValue;
+                LoadingPercentage.text = "100%";
+            }
+            else if (0.0f < percentageComplete && percentageComplete < 100.0f)
+            {
+                // Otherwise, if in the valid range, set the loading bar value and
+                // percentage text based on the normalised value
+                LoadingSlider.value = (int)percentageComplete;
                 LoadingPercentage.text = (int)percentageComplete + "%";
             }
             else

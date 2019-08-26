@@ -15,8 +15,8 @@ namespace DepthVisor.Playback
         [SerializeField] PlaybackTimesManager timersManager;
 
         [Header("Loading Parameters")]
-        [SerializeField] short InitialChunkLoadSize = 3;
-        [SerializeField] short ChunkBufferSize = 2;
+        [SerializeField] short InitialChunkLoadSize = 2;
+        [SerializeField] short ChunkBufferSize = 1;
 
         public event EventHandler FileInfoFinishedLoading;
         public event EventHandler ChunkFinishedDeserialization;
@@ -43,7 +43,7 @@ namespace DepthVisor.Playback
             IsLoading = false;
             IsPlaying = false;
 
-            FileInfoFinishedLoading += FileInfoFinishedLoading;
+            FileInfoFinishedLoading += FileInfoLoadFinishedHandler;
             ChunkFinishedDeserialization += LoadChunkFinishedHandler;
         }
 
@@ -178,18 +178,18 @@ namespace DepthVisor.Playback
             // use the initial chunks to load variable
             if (InitialChunkLoadSize > OpenFileInfo.ChunkSizes.Count)
             {
-                fileChunkIndex = OpenFileInfo.ChunkSizes.Count;
+                fileChunkIndex = OpenFileInfo.ChunkSizes.Count - 1;
             }
             else
             {
-                fileChunkIndex = InitialChunkLoadSize;
+                fileChunkIndex = InitialChunkLoadSize - 1;
             }
 
             // If there is more than one chunk to load, queue up chunk loading callbacks with
             // the relevant data items for all chunks other than the first
-            if (fileChunkIndex > 1)
+            if (fileChunkIndex > 0)
             {
-                for (int i = 1; i < fileChunkIndex; i++)
+                for (int i = 1; i < fileChunkIndex+1; i++)
                 {
                     ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), OpenFileInfo.ChunkSizes[i]);
                     chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));

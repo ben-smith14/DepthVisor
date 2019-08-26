@@ -1,7 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Text;
-using System.IO.Compression;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
@@ -45,33 +43,49 @@ namespace DepthVisor.FileStorage
                 throw new FileNotFoundException("Could not find the specified file");
             }
 
-            // Use a binary formatter, file stream and gzip stream to serialize and compress the data down
-            // so that it can be appended onto the save file. Also record the size of the new chunk using
-            // the stream position before and after to store it in the file info object
+            // Use a binary formatter and memory stream to first serialize the incoming
+            // chunk. Then, use QuickLZ to compress this data before writing it into the
+            // file
             BinaryFormatter formatter = new BinaryFormatter();
-            using (FileStream fileStream = new FileStream(GetFullFilePath(fileName), FileMode.Append))
+            using (MemoryStream memoryStream = new MemoryStream())
             {
-                using (GZipStream compressStream = new GZipStream(fileStream, System.IO.Compression.CompressionLevel.Fastest))
+                try
                 {
-                    long startPosition = fileStream.Position;
+                    formatter.Serialize(memoryStream, serializableData);
+                }
+                catch (SerializationException)
+                {
+                    throw new SerializationException("Error in serializing kinect data");
+                }
+
+                // Reset the memory stream to its beginning and then compress the serialized object.
+                // Level 1 gives a higher compression ration and Level 3 gives faster decompression
+                memoryStream.Position = 0;
+                byte[] compressedBytes = QuickLZ.compress(memoryStream.ToArray(), 3);
+
+                // Append the chunk onto the file, also recording the size of the new chunk using the
+                // stream position before and after the write so that it can be stored in the file info
+                // object
+                long startPosition, endPosition;
+                using (FileStream fileStream = new FileStream(GetFullFilePath(fileName), FileMode.Append, FileAccess.Write))
+                {
+                    startPosition = fileStream.Position;
 
                     try
                     {
-                        formatter.Serialize(compressStream, serializableData);
+                        fileStream.Write(compressedBytes, 0, compressedBytes.Length);
                     }
-                    catch (SerializationException)
+                    catch (IOException)
                     {
-                        throw new SerializationException("Error in serializing kinect data");
+                        throw new IOException("Could not write chunk data to file");
                     }
 
-                    // The file stream position will be at the next free position, so backtrack by one
-                    // to get the last byte position of the serialized object
-                    long endPosition = (fileStream.Position - 1);
-
-                    // Add a new chunk size to the file info object's internal list using the stream
-                    // position differences
-                    fileInfo.ChunkSizes.Add(endPosition - startPosition);
+                    endPosition = fileStream.Position;
                 }
+
+                // Add a new chunk size to the file info object's internal list using the stream
+                // position differences
+                fileInfo.ChunkSizes.Add(endPosition - startPosition);
             }
         }
 
@@ -90,37 +104,50 @@ namespace DepthVisor.FileStorage
             // Add the final recording length to the file info object to complete it
             fileInfo.TotalRecordingLength = recordingLengthInSecs;
 
-            // Use a binary formatter, file stream and gzip stream once again to serialize and compress the
-            // info object and append it onto the file. Record the size of the object using the stream
-            // positions during this
             long startPosition, endPosition;
-            BinaryFormatter formatter = new BinaryFormatter();
             string fullFilePath = GetFullFilePath(fileName);
-            using (FileStream fileStream = new FileStream(fullFilePath, FileMode.Append))
+
+            // Use similar code to the saving of chunks to serialize the data, compress it and then
+            // append it onto the end of the save file
+            BinaryFormatter formatter = new BinaryFormatter();
+            using (MemoryStream memoryStream = new MemoryStream())
             {
-                using (GZipStream compressStream = new GZipStream(fileStream, System.IO.Compression.CompressionLevel.Fastest))
-                {   
+                try
+                {
+                    formatter.Serialize(memoryStream, fileInfo);
+                }
+                catch (SerializationException)
+                {
+                    throw new SerializationException("Error in serializing file information");
+                }
+
+                memoryStream.Position = 0;
+                byte[] compressedBytes = QuickLZ.compress(memoryStream.ToArray(), 3);
+
+                using (FileStream fileStream = new FileStream(fullFilePath, FileMode.Append, FileAccess.Write))
+                {
                     startPosition = fileStream.Position;
 
                     try
                     {
-                        formatter.Serialize(compressStream, fileInfo);
+                        fileStream.Write(compressedBytes, 0, compressedBytes.Length);
                     }
-                    catch (SerializationException)
+                    catch (IOException)
                     {
-                        throw new SerializationException("Error in serializing file info");
+                        throw new IOException("Could not write file information to file");
                     }
 
-                    endPosition = fileStream.Position - 1;
+                    endPosition = fileStream.Position;
                 }
             }
 
+            // TODO : Delete
             Debug.Log("Footer size: " + (endPosition - startPosition));
 
             // Finally, reopen the file using a binary writer and append the file info object size onto its end.
             // The file has to be reopened like this because opening multiple writers on the same stream causes
             // errors
-            using (BinaryWriter writer = new BinaryWriter(File.Open(fullFilePath, FileMode.Append)))
+            using (BinaryWriter writer = new BinaryWriter(File.Open(fullFilePath, FileMode.Append, FileAccess.Write)))
             {
                 try
                 {
@@ -128,7 +155,7 @@ namespace DepthVisor.FileStorage
                 }
                 catch (IOException)
                 {
-                    throw new IOException("Error in writing file information to the file");
+                    throw new IOException("Error in writing file footer size to the file");
                 }
             }
         }

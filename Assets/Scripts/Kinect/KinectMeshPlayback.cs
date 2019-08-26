@@ -58,9 +58,11 @@ namespace DepthVisor.Kinect
         void Update()
         {
             // As mesh initialisation happens all in one frame, if the mesh state indicates that
-            // it was initialising, change it to the rendering state
+            // it is initialising, call the associated method and then change it to the rendering
+            // state
             if (currentMeshState == MeshState.InitialisingMesh)
             {
+                InitialisePlayback(PlaybackManager.GetNextChunk(), PlaybackManager.OpenFileInfo);
                 SetMeshState(MeshState.RenderingMesh);
             }
 
@@ -370,8 +372,6 @@ namespace DepthVisor.Kinect
                 case MeshState.InitialisingMesh:
                     if (!MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(true); }
                     if (meshRenderer.enabled) { meshRenderer.enabled = false; }
-
-                    InitialisePlayback(PlaybackManager.GetNextChunk(), PlaybackManager.OpenFileInfo);
                     break;
                 // For the rendering mesh state, hide the mesh status message if visible, then enable the
                 // mesh renderer if not visible
