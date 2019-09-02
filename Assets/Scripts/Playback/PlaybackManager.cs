@@ -5,26 +5,21 @@ using System.Threading;
 using UnityEngine;
 
 using DepthVisor.FileStorage;
-using DepthVisor.UI;
 
 namespace DepthVisor.Playback
 {
     public class PlaybackManager : MonoBehaviour
     {
-        [Header("Game Objects")]
-        [SerializeField] PlaybackTimesManager timersManager;
-
         [Header("Loading Parameters")]
-        [SerializeField] short InitialChunkLoadSize = 2;
-        [SerializeField] short ChunkBufferSize = 1;
+        [SerializeField] short RefreshBufferSize = 4;
+        [SerializeField] short ChunkBufferSize = 2;
 
         public event EventHandler FileInfoFinishedLoading;
         public event EventHandler ChunkFinishedDeserialization;
 
-        public bool FileReady { get; private set; }
         public bool IsLoading { get; private set; }
         public bool IsPlaying { get; private set; }
-        public FileSystem.FileInfo OpenFileInfo { get; private set; }
+        public FileSystem.FileInfo FileInfoOpen { get; private set; }
 
         private FileSystemLoader fileLoader;
         private Queue<ChunkToLoad> chunksToLoadQueue;
@@ -39,17 +34,11 @@ namespace DepthVisor.Playback
 
             chunksToLoadQueue = new Queue<ChunkToLoad>();
             loadedChunkQueue = new Queue<KinectFramesStore>();
-            FileReady = false;
             IsLoading = false;
             IsPlaying = false;
 
             FileInfoFinishedLoading += FileInfoLoadFinishedHandler;
             ChunkFinishedDeserialization += LoadChunkFinishedHandler;
-        }
-
-        void Update()
-        {
-            
         }
 
         public void StartPlaying()
@@ -62,7 +51,7 @@ namespace DepthVisor.Playback
             IsPlaying = false;
         }
 
-        public int GetDataQueueCount()
+        public int GetChunksToLoadCount()
         {
             return chunksToLoadQueue.Count;
         }
@@ -74,46 +63,86 @@ namespace DepthVisor.Playback
 
         public KinectFramesStore GetNextChunk()
         {
-            // First check to see if any chunks are available in the queue
+            // First check to see if any chunks are available in the queue, returning
+            // a null reference if there aren't
             if (loadedChunkQueue.Count == 0)
             {
-                throw new InvalidOperationException("No chunks in load queue");
+                return null;
             }
 
-            // Dequeue the next chunk
+            // Otherwise, dequeue the next chunk
             KinectFramesStore nextChunk = loadedChunkQueue.Dequeue();
 
-            //// If the queue is now smaller than the buffer size, first check to see if there
-            //// any chunks left in the file
-            //if (loadedChunkQueue.Count < ChunkBufferSize)
-            //{
-            //    int chunksLeft = (OpenFileInfo.ChunkSizes.Count - 1) - fileChunkIndex;
-            //    if (chunksLeft > 0)
-            //    {
-            //        // If there are chunks left but a smaller amount than the buffer size, simply
-            //        // load in the remaining chunks
-            //        if (chunksLeft > ChunkBufferSize)
-            //        {
-            //            // TODO : for loop that queues up the next load of chunks to fill the buffer
-            //            //ChunkBufferSize - loadedChunkQueue.Count
-            //        }
-            //        else
-            //        {
-            //            // Otherwise, fill up the buffer with chunks
-            //            // TODO : for loop that fills the buffer up as much as it can
-            //        }
-            //    }
-            //}
+            // If the file chunk index is not at the last position, there is more data
+            // left in the file
+            if (fileChunkIndex < FileInfoOpen.ChunkSizes.Count-1)
+            {
+                // If the loaded chunk queue is now under the buffer size, stop playback and
+                // load in more chunks to refresh the buffer
+                if (loadedChunkQueue.Count < ChunkBufferSize)
+                {
+                    StopPlaying();
 
-            //// TODO : Finish off the function
-            //ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(fileChunkIndex), OpenFileInfo.ChunkSizes[fileChunkIndex]);
-            //if (!IsLoading)
-            //{
-            //    ThreadPool.QueueUserWorkItem(ChunkLoadCallback, data);
-            //} else
-            //{
-            //    chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
-            //}
+                    // Check that the number of chunks left in the file is greater than the number
+                    // of chunks to load in to refill the buffer. If it is not, use the remaining
+                    // number of chunks in the file instead
+                    int lastChunkIndex = fileChunkIndex;
+                    if (RefreshBufferSize > (FileInfoOpen.ChunkSizes.Count - 1 - fileChunkIndex))
+                    {
+                        fileChunkIndex = FileInfoOpen.ChunkSizes.Count - 1;
+                    }
+                    else
+                    {
+                        fileChunkIndex += RefreshBufferSize;
+                    }
+
+                    // If a chunk is still loading as well, simply queue up all of these new chunks
+                    if (IsLoading)
+                    {
+                        for (int i = lastChunkIndex + 1; i < fileChunkIndex + 1; i++)
+                        {
+                            ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
+                            chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
+                        }
+                    }
+                    else
+                    {
+                        // Otherwise, if there is more than one chunk to load, skip over the first chunk
+                        // in this new set and queue up all of the others, including the chunk that the
+                        // global index is currently on
+                        if (fileChunkIndex - lastChunkIndex > 1)
+                        {
+                            for (int i = lastChunkIndex + 2; i < fileChunkIndex + 1; i++)
+                            {
+                                ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
+                                chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
+                            }
+                        }
+
+                        // Then, begin loading in the first of these new chunks
+                        ThreadPool.QueueUserWorkItem(ChunkLoadCallback,
+                            new ChunkLoadData(GetChunkStartFromIndex(lastChunkIndex + 1), FileInfoOpen.ChunkSizes[lastChunkIndex + 1]));
+                    }
+                }
+                else
+                {
+                    // Otherwise, just load in the next chunk to replace the one just dequeued
+                    fileChunkIndex++;
+                    ChunkToLoad newChunkToLoad = new ChunkToLoad(ChunkLoadCallback,
+                        new ChunkLoadData(GetChunkStartFromIndex(fileChunkIndex), FileInfoOpen.ChunkSizes[fileChunkIndex]));
+
+                    // If another chunk is already loading, add this new chunk into the chunks to load
+                    // queue. Otherwise, manually queue the chunk processing task on the background thread
+                    if (IsLoading)
+                    {
+                        chunksToLoadQueue.Enqueue(newChunkToLoad);
+                    }
+                    else
+                    {
+                        ThreadPool.QueueUserWorkItem(newChunkToLoad.LoadCallback, newChunkToLoad.LoadData);
+                    }
+                }
+            }
 
             return nextChunk;
         }
@@ -130,11 +159,11 @@ namespace DepthVisor.Playback
 
         private long GetChunkStartFromIndex(int chunkIndex)
         {
-            if (OpenFileInfo == null)
+            if (FileInfoOpen == null)
             {
                 throw new NullReferenceException("No file info available");
             }
-            else if (chunkIndex > (OpenFileInfo.ChunkSizes.Count - 1) || chunkIndex < 0)
+            else if (chunkIndex > (FileInfoOpen.ChunkSizes.Count - 1) || chunkIndex < 0)
             {
                 throw new ArgumentOutOfRangeException("Provided chunk index is not within the index range of the file info");
             }
@@ -144,7 +173,7 @@ namespace DepthVisor.Playback
             long chunkStartBytes = 0;
             for (int i = 0; i < chunkIndex; i++)
             {
-                chunkStartBytes += OpenFileInfo.ChunkSizes[i];
+                chunkStartBytes += FileInfoOpen.ChunkSizes[i];
             }
 
             // I do not need to add 1 to get the start of the next chunk because the byte array index
@@ -158,15 +187,15 @@ namespace DepthVisor.Playback
             {
                 // Try to deserialize and load the file info, storing a reference to it in
                 // the manager. Then trigger the file info finished loading event
-                OpenFileInfo = fileLoader.DeserializeAndLoadFileInfo((string)callbackData);
+                FileInfoOpen = fileLoader.DeserializeAndLoadFileInfo((string)callbackData);
             }
             catch (ArgumentOutOfRangeException e)
             {
-                // TODO : File is smaller than minimum size, so show error message in options panel
-                // Should I move this catch to the canvas??
+                // An exception will indicate that the file is smaller than the minimum size
                 throw new ArgumentOutOfRangeException(e.Message);
             }
 
+            // Trigger this event
             FileInfoFinishedLoading.Invoke(this, new EventArgs());
         }
 
@@ -176,28 +205,28 @@ namespace DepthVisor.Playback
             // Check that the number of chunks in the file is greater than the initial number
             // of chunks to load. If it is not, use the number of chunks in the file, otherwise
             // use the initial chunks to load variable
-            if (InitialChunkLoadSize > OpenFileInfo.ChunkSizes.Count)
+            if (RefreshBufferSize > FileInfoOpen.ChunkSizes.Count)
             {
-                fileChunkIndex = OpenFileInfo.ChunkSizes.Count - 1;
+                fileChunkIndex = FileInfoOpen.ChunkSizes.Count - 1;
             }
             else
             {
-                fileChunkIndex = InitialChunkLoadSize - 1;
+                fileChunkIndex = RefreshBufferSize - 1;
             }
 
             // If there is more than one chunk to load, queue up chunk loading callbacks with
             // the relevant data items for all chunks other than the first
             if (fileChunkIndex > 0)
             {
-                for (int i = 1; i < fileChunkIndex+1; i++)
+                for (int i = 1; i < fileChunkIndex + 1; i++)
                 {
-                    ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), OpenFileInfo.ChunkSizes[i]);
+                    ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
                     chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
                 }
             }
 
             // Then, begin loading in the first chunk
-            ThreadPool.QueueUserWorkItem(ChunkLoadCallback, new ChunkLoadData(GetChunkStartFromIndex(0), OpenFileInfo.ChunkSizes[0]));
+            ThreadPool.QueueUserWorkItem(ChunkLoadCallback, new ChunkLoadData(GetChunkStartFromIndex(0), FileInfoOpen.ChunkSizes[0]));
         }
 
         private void ChunkLoadCallback(object callbackData)
@@ -226,7 +255,6 @@ namespace DepthVisor.Playback
             {
                 // Otherwise, the manager has finished loading data, so flip the
                 // relevant flags
-                if (!FileReady) { FileReady = true; }
                 IsLoading = false;
             }
         }

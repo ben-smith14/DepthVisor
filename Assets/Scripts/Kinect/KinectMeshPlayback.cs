@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 using UnityEngine;
 
@@ -19,6 +18,8 @@ namespace DepthVisor.Kinect
         [Header("Mesh Parameters")]
         [Range(2.0f, 25.0f)] [SerializeField] float TriEdgeThreshold = 10.0f;
 
+        public bool LastFrame { get; private set; }
+
         private enum MeshState
         {
             StartingUp,
@@ -27,29 +28,27 @@ namespace DepthVisor.Kinect
             RenderingMesh
         }
 
-        private const int chunkBufferSize = 1;
-
         private MeshState currentMeshState;
         private Renderer meshRenderer;
         private Mesh mesh;
         private Vector3[] vertices;
         private Vector2[] uv;
         private List<int> thresholdTris;
-        private Queue<KinectFramesStore> chunkBuffer;
         private KinectFramesStore currentChunk;
+        private KinectFramesStore nextChunk;
 
-        private int frameIndex;
         private float frameTimeDelta;
-        private bool preventSkipFlag;
+        private bool lastChunk;
 
         void Start()
         {
             // Retrieve a reference to the mesh renderer and the mesh object in the mesh filter
             meshRenderer = gameObject.GetComponent<Renderer>();
-            mesh = gameObject.GetComponent<MeshFilter>().mesh;
 
-            // Initialise the chunk buffer queue
-            chunkBuffer = new Queue<KinectFramesStore>();
+            // Initialise the next chunk as a null object and initialise the last chunk/frame flags
+            nextChunk = null;
+            lastChunk = false;
+            LastFrame = false;
 
             // Set the mesh state to the no file state until it is initialised
             SetMeshState(MeshState.NoFile);
@@ -57,56 +56,32 @@ namespace DepthVisor.Kinect
 
         void Update()
         {
-            // As mesh initialisation happens all in one frame, if the mesh state indicates that
-            // it is initialising, call the associated method and then change it to the rendering
-            // state
+            // If the mesh state indicates that it should be initialising, call the associated method
+            // within this frame and then change to the rendering state
             if (currentMeshState == MeshState.InitialisingMesh)
             {
-                InitialisePlayback(PlaybackManager.GetNextChunk(), PlaybackManager.OpenFileInfo);
+                InitialisePlayback(PlaybackManager.GetNextChunk(), PlaybackManager.FileInfoOpen);
                 SetMeshState(MeshState.RenderingMesh);
             }
-
-            //// If the playback manager has initialised a file, first check the mesh state
-            //if (PlaybackManager.FileReady)
-            //{
-            //    // If the mesh state indicates no file, initialise the mesh by changing state
-            //    if (currentMeshState == MeshState.NoFile)
-            //    {
-            //        SetMeshState(MeshState.InitialisingMesh);
-            //        return;
-            //    }
-            //    else if (currentMeshState == MeshState.InitialisingMesh)
-            //    {
-            //        // Otherwise, if the mesh has been initialised, begin rendering it by changing
-            //        // state once again
-            //        SetMeshState(MeshState.RenderingMesh);
-            //        return;
-            //    }
-
-            //    // If the mesh is rendering and the user is playing the recording, begin updating
-            //    // frames using the chunks that have been loaded in
-            //    if (currentMeshState == MeshState.RenderingMesh && PlaybackManager.IsPlaying)
-            //    {
-            //        CheckForMeshUpdate();
-            //    }
-
-            //    // TODO : Load in more chunks if not enough in buffer
-            //    if (chunkBuffer.Count < chunkBufferSize)
-            //    {
-            //        PlaybackManager.GetNextChunk();
-            //    }
-            //}
+            else if (currentMeshState == MeshState.RenderingMesh && PlaybackManager.IsPlaying)
+            {
+                // Otherwise, if the recording is playing and the mesh is rendering, check if enough
+                // time has passed to render the next frame
+                CheckForMeshUpdate();
+            }
         }
 
         public void ShowAndInitialiseMesh()
         {
+            // Change the mesh state in order to initialise it within the next frame
             SetMeshState(MeshState.InitialisingMesh);
         }
 
         private void InitialisePlayback(KinectFramesStore firstChunk, FileSystem.FileInfo fileInfo)
         {
-            // Store the input chunk
+            // Store the first chunk and ensure that the frame iterator is at the first position
             currentChunk = firstChunk;
+            currentChunk.Reset();
 
             // Initialise an empty downsampled mesh as a 2D plane with the correct height and width
             // attributes that match the recording images
@@ -114,20 +89,23 @@ namespace DepthVisor.Kinect
 
             // Align the centre of the mesh to its parent container origin, which by default is world
             // space
-            AlignMeshToWorldOrigin(fileInfo.MeshWidth, fileInfo.MeshHeight, fileInfo.DepthScale, fileInfo.MinReliableDistance, fileInfo.MaxReliableDistance);
+            AlignMeshToWorldOrigin(fileInfo.MeshWidth, fileInfo.MeshHeight, fileInfo.DepthScale,
+                fileInfo.MinReliableDistance, fileInfo.MaxReliableDistance);
 
-            // Initialise the timer between frames and the frame indexer
+            // Load in the first frame to the mesh by moving the iterator up and then reading
+            // the current frame value
+            currentChunk.MoveNext();
+            RefreshMeshData(fileInfo.MeshWidth, fileInfo.MeshHeight, currentChunk.Current);
+
+            // Finally, initialise the timer between frames
             frameTimeDelta = 0.0f;
-            frameIndex = 0;
-
-            // Load in the first frame
-            RefreshMeshData(fileInfo.MeshWidth, fileInfo.MeshHeight, currentChunk[frameIndex]);
         }
 
         private void InitialiseMeshData(int meshWidth, int meshHeight)
         {
             // Create a new mesh object and set it as the component for the game object
             mesh = new Mesh();
+            GetComponent<MeshFilter>().mesh = mesh;
 
             // Initialise the data structures for the mesh and use a temporary triangles
             // array, which won't be filtered for edge length at this stage
@@ -284,69 +262,73 @@ namespace DepthVisor.Kinect
 
         private void CheckForMeshUpdate()
         {
-            // Add the time from the last frame onto the timer variable
+            // If on the last frame, simply return out
+            if (LastFrame) { return; }
+
+            // Otherwise, start by adding the time from the last frame onto
+            // the timer variable
             frameTimeDelta += Time.deltaTime;
 
-            try
+            if (!lastChunk && nextChunk == null)
             {
-                // The time delta stored with each frame is the time between itself and
-                // the frame before it, so when looking to load in a new frame, we need to
-                // check the time of the next frame in the chunk. However, if we are moving
-                // from the last frame in a chunk to a the first frame in a new chunk and
-                // the frame time was not long enough to trigger a refresh of the mesh in
-                // the catch block, using the next frame along would skip the first frame
-                // in this new chunk. Therefore, a flag is used to indicate if we need to
-                // prevent skipping by using the time delta of the current chunk instead
-                float tempTimeDelta;
-                if (preventSkipFlag)
-                {
-                    tempTimeDelta = currentChunk[currentChunk.FrameIndex].FrameDeltaTime;
-                }
-                else
-                {
-                    tempTimeDelta = currentChunk[currentChunk.FrameIndex + 1].FrameDeltaTime;
-                }
+                // If the last chunk flag is false and the next chunk is null,
+                // get a new one from the playback manager
+                nextChunk = PlaybackManager.GetNextChunk();
 
-                // If the timer count is greater than or equal to the time between this frame and
-                // the next, load in the next frame and reset the associated variables
-                if (frameTimeDelta >= tempTimeDelta)
+                if (nextChunk == null)
                 {
-                    RefreshMeshData(PlaybackManager.OpenFileInfo.MeshWidth, PlaybackManager.OpenFileInfo.MeshHeight, currentChunk.NextFrame());
-                    if (preventSkipFlag) { preventSkipFlag = false; }
-                    frameTimeDelta = 0.0f;
+                    // If it is still null, there are no more chunks left, so set
+                    // the last chunk flag
+                    if (!lastChunk) { lastChunk = true; }
                 }
             }
-            catch (IndexOutOfRangeException)
-            {
-                // If we try to access the next frame in the chunk and we are at the end of the chunk,
-                // an exception will be thrown, so catch this and start using a new chunk
-                if (chunkBuffer.Count > 0)
-                {
-                    // If there are chunks available in the buffer, assign one to the current chunk,
-                    // and fetch a new chunk to place in the buffer from the playback manager
-                    currentChunk = chunkBuffer.Dequeue();
-                    chunkBuffer.Enqueue(PlaybackManager.GetNextChunk());
 
-                    // Then, perform the same check on the timings as before and refresh the mesh data
-                    // if this check is valid
-                    if (frameTimeDelta >= currentChunk[currentChunk.FrameIndex].FrameDeltaTime)
-                    {
-                        RefreshMeshData(PlaybackManager.OpenFileInfo.MeshWidth, PlaybackManager.OpenFileInfo.MeshHeight, currentChunk[currentChunk.FrameIndex]);
-                        if (preventSkipFlag) { preventSkipFlag = false; }
-                        frameTimeDelta = 0.0f;
-                    }
-                    else
-                    {
-                        // Otherwise, to prevent skipping of the first frame in the new chunk, flip the
-                        // associated flag
-                        preventSkipFlag = true;
-                    }
+            // If the current chunk has a next frame, this check will automatically move
+            // up the iterator position, so store a reference to this next frame
+            KinectFramesStore.KinectFrame nextFrame;
+            if (currentChunk.MoveNext())
+            {
+                nextFrame = currentChunk.Current;
+            }
+            else
+            {
+                // Otherwise, the chunk is at its last frame, so first check if this is
+                // the last chunk
+                if (lastChunk)
+                {
+                    // If it is, flip the last frame flag and return.
+                    LastFrame = true;
+                    return;
                 }
                 else
                 {
-                    // TODO : Do this here or in canvas manager?
-                    PlaybackManager.StopPlaying();
+                    // Otherwise, a next chunk is available, so switch this out for the
+                    // current chunk and dereference the next chunk pointer
+                    currentChunk = new KinectFramesStore(nextChunk);
+                    nextChunk = null;
+
+                    // Then, ensure that the iterator component it is at the first position,
+                    // move the pointer up by one and store a local reference to the next frame
+                    currentChunk.Reset();
+                    currentChunk.MoveNext();
+                    nextFrame = currentChunk.Current;
                 }
+                
+            }
+
+            // If the timer count is greater than or equal to the time between this frame and
+            // the next, load in the next frame's data to the mesh and reset the frame timer
+            if (frameTimeDelta >= nextFrame.FrameDeltaTime)
+            {
+                RefreshMeshData(PlaybackManager.FileInfoOpen.MeshWidth, PlaybackManager.FileInfoOpen.MeshHeight, nextFrame);
+                frameTimeDelta = 0.0f;
+            }
+            else
+            {
+                // Otherwise, the frame can not be loaded yet, so move the iterator pointer
+                // position back by one so that the next update will carry out the check on
+                // the same frame
+                currentChunk.MovePrev();
             }
         }
 
@@ -378,9 +360,6 @@ namespace DepthVisor.Kinect
                 case MeshState.RenderingMesh:
                     if (MeshStatusTextContainer.activeSelf) { MeshStatusTextContainer.SetActive(false); }
                     if (!meshRenderer.enabled) { meshRenderer.enabled = true; }
-
-                    // TODO : Do I need this??
-                    preventSkipFlag = false;
                     break;
             }
 

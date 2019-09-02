@@ -9,10 +9,15 @@ namespace DepthVisor.FileStorage
 {
     public class FileSystem : MonoBehaviour
     {
-        protected const string depthVisorSaveFolder = "DepthVisorSaves";
+        protected const string depthVisorSaveDirec = "DepthVisorSaves";
         protected const string fileExtension = ".dvrec";
 
         protected string depthVisorSavePath;
+
+        protected virtual void Awake()
+        {
+            depthVisorSavePath = PlayerPrefs.GetString("savePath");
+        }
 
         public void CreateSaveDirectoryIfNotExists()
         {
@@ -53,7 +58,7 @@ namespace DepthVisor.FileStorage
 
         protected string GetFullSavePath()
         {
-            return Path.Combine(depthVisorSavePath, depthVisorSaveFolder);
+            return Path.Combine(depthVisorSavePath, depthVisorSaveDirec);
         }
 
         protected string GetFullFilePath(string fileName)
@@ -74,7 +79,8 @@ namespace DepthVisor.FileStorage
             public List<long> ChunkSizes { get; set; }
             public float TotalRecordingLength { get; set; }
 
-            public FileInfo(short framesPerChunk, int meshWidth, int meshHeight, float depthScale, short minReliableDistance, short maxReliableDistance)
+            public FileInfo(short framesPerChunk, int meshWidth, int meshHeight, float depthScale,
+                short minReliableDistance, short maxReliableDistance)
             {
                 MeshWidth = meshWidth;
                 MeshHeight = meshHeight;
@@ -113,19 +119,6 @@ namespace DepthVisor.FileStorage
                 info.AddValue("framesPerChunk", FramesPerChunk, typeof(short));
                 info.AddValue("chunkSizes", ChunkSizes, typeof(List<long>));
                 info.AddValue("totalRecordingLength", TotalRecordingLength, typeof(float));
-            }
-
-            // For debugging
-            public override string ToString()
-            {
-                return "Mesh width: " + MeshWidth + "\n" +
-                    "Mesh height: " + MeshHeight + "\n" +
-                    "Depth scale: " + DepthScale + "\n" +
-                    "Min distance: " + MinReliableDistance + "\n" +
-                    "Max distance: " + MaxReliableDistance + "\n" +
-                    "Frames per chunk: " + FramesPerChunk + "\n" +
-                    "Chunk Size length: " + ChunkSizes.Count + "\n" +
-                    "Total recording length: " + TotalRecordingLength;
             }
         }
     }

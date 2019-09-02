@@ -3,8 +3,6 @@ using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 
-using UnityEngine;
-
 using DepthVisor.Kinect;
 
 namespace DepthVisor.FileStorage
@@ -13,10 +11,12 @@ namespace DepthVisor.FileStorage
     {
         private FileInfo fileInfo;
 
-        void Awake()
+        protected override void Awake()
         {
-            depthVisorSavePath = PlayerPrefs.GetString("savePath");
-            fileInfo = new FileInfo(0, 0, 0, KinectMeshGenerator.DepthScale, KinectMeshGenerator.DepthMinReliableDistance, KinectMeshGenerator.DepthMaxReliableDistance);
+            base.Awake();
+            fileInfo = new FileInfo(0, 0, 0, KinectMeshGenerator.DepthScale,
+                KinectMeshGenerator.DepthMinReliableDistance,
+                KinectMeshGenerator.DepthMaxReliableDistance);
         }
 
         public void SetFramesPerChunk(short framesPerChunk)
@@ -140,9 +140,6 @@ namespace DepthVisor.FileStorage
                     endPosition = fileStream.Position;
                 }
             }
-
-            // TODO : Delete
-            Debug.Log("Footer size: " + (endPosition - startPosition));
 
             // Finally, reopen the file using a binary writer and append the file info object size onto its end.
             // The file has to be reopened like this because opening multiple writers on the same stream causes

@@ -3,15 +3,13 @@ using System.IO;
 using System.Text;
 using System.Runtime.Serialization.Formatters.Binary;
 
-using UnityEngine;
-
 namespace DepthVisor.FileStorage
 {
     public class FileSystemLoader : FileSystem
     {
-        void Awake()
+        protected override void Awake()
         {
-            depthVisorSavePath = PlayerPrefs.GetString("savePath");
+            base.Awake();
         }
 
         public FileInfo DeserializeAndLoadFileInfo(string fileName)

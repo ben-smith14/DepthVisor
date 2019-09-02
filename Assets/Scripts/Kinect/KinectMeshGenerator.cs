@@ -275,7 +275,7 @@ namespace DepthVisor.Kinect
                     // region to get a single average depth value. Then, scale this value down to reduce the
                     // size of the mesh in the scene view and assign the current value to the Z parameter of
                     // the next vertex to set its position in the mesh
-                    double avg = GetAvg(depthData, x, y, kinectManager.DepthFrameWidth);
+                    double avg = GetAvgDepth(depthData, x, y, kinectManager.DepthFrameWidth);
                     avg *= DepthScale;
                     vertices[smallIndex].z = (float)avg;
 
@@ -337,7 +337,7 @@ namespace DepthVisor.Kinect
             mesh.RecalculateNormals();
         }
 
-        private double GetAvg(ushort[] depthData, int x, int y, int width)
+        private double GetAvgDepth(ushort[] depthData, int x, int y, int width)
         {
             double sum = 0.0;
 

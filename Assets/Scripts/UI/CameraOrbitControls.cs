@@ -5,16 +5,16 @@ namespace DepthVisor.UI
     public class CameraOrbitControls : MonoBehaviour
     {
         [Header("Tuning Parameters")]
-        [SerializeField] float StartCameraRadius = 10f;
-        [SerializeField] float StartCameraElevation = 20f;
-        [SerializeField] float StartCameraAzimuth = 0f;
-        [SerializeField] float MoveSpeed = 1f;
-        [SerializeField] float ZoomSpeed = 1f;
-        [SerializeField] float RadiusMin = 5f;
-        [SerializeField] float RadiusMax = 25f;
+        [SerializeField] private float StartCameraRadius = 10f;
+        [SerializeField] private float StartCameraElevation = 20f;
+        [SerializeField] private float StartCameraAzimuth = 0f;
+        [SerializeField] private float MoveSpeed = 1f;
+        [SerializeField] private float ZoomSpeed = 1f;
+        [SerializeField] private float RadiusMin = 5f;
+        [SerializeField] private float RadiusMax = 25f;
 
         [Header("Target Object")]
-        [SerializeField] GameObject MeshTargetContainer = null;
+        [SerializeField] private GameObject MeshTargetContainer = null;
 
         private CameraHemisphere cameraHemisphere;
         private bool allowMouseMovement;
@@ -163,7 +163,8 @@ namespace DepthVisor.UI
             // for the Unity world space coordinate frame
             private static SphericalCoordinates CartesianToSpherical(Vector3 cartesian)
             {
-                SphericalCoordinates sphericalConversion = new SphericalCoordinates(0, 0, 0, CameraOrbit.RadiusMin, CameraOrbit.RadiusMax)
+                SphericalCoordinates sphericalConversion = 
+                    new SphericalCoordinates(0, 0, 0, CameraOrbit.RadiusMin, CameraOrbit.RadiusMax)
                 {
                     Radius = Mathf.Sqrt((cartesian.x * cartesian.x)
                                         + (cartesian.y * cartesian.y)
@@ -192,74 +193,58 @@ namespace DepthVisor.UI
                 return cartesian;
             }
 
-            // For debugging
-            public override string ToString()
+            // The class that acts as a store for spherical coordinates in a similar way
+            // to the Vector3 class for cartesian coordinates
+            private class SphericalCoordinates
             {
-                return "Origin: " + Origin + "\n" +
-                       "Radius: " + Radius + "\n" +
-                       "Camera Position: " + CameraPosition.ToString() + "\n";
-            }
-        }
+                private float radius;
+                private float elevation;
+                private float azimuth;
 
-        // The class that acts as a store for spherical coordinates in a similar way
-        // to the Vector3 class for cartesian coordinates
-        private class SphericalCoordinates
-        {
-            private float radius;
-            private float elevation;
-            private float azimuth;
+                private float RadiusMin { get; set; }
+                private float RadiusMax { get; set; }
 
-            private float RadiusMin { get; set; }
-            private float RadiusMax { get; set; }
-
-            public SphericalCoordinates(float radius, float elevation, float azimuth, float radiusMin, float radiusMax)
-            {
-                Radius = radius;
-                Elevation = elevation;
-                Azimuth = azimuth;
-                RadiusMin = radiusMin;
-                RadiusMax = radiusMax;
-            }
-
-            public float Radius
-            {
-                get { return radius; }
-                set
+                public SphericalCoordinates(float radius, float elevation, float azimuth, float radiusMin, float radiusMax)
                 {
-                    // Clamp the radius between the input min and max values
-                    radius = Mathf.Clamp(value, RadiusMin, RadiusMax);
+                    Radius = radius;
+                    Elevation = elevation;
+                    Azimuth = azimuth;
+                    RadiusMin = radiusMin;
+                    RadiusMax = radiusMax;
                 }
-            }
 
-            public float Elevation
-            {
-                get { return elevation; }
-                set
+                public float Radius
                 {
-                    // Clamp the elevation values between 0 and just under pi/2 (90 deg).
-                    // This prevents the angle from ever reaching the very top of the
-                    // hemisphere, which causes flickering between azimuth quadrants
-                    elevation = Mathf.Clamp(value, 0, Mathf.PI / 2 - Mathf.Deg2Rad / 2);
+                    get { return radius; }
+                    set
+                    {
+                        // Clamp the radius between the input min and max values
+                        radius = Mathf.Clamp(value, RadiusMin, RadiusMax);
+                    }
                 }
-            }
 
-            public float Azimuth
-            {
-                get { return azimuth; }
-                set
+                public float Elevation
                 {
-                    // Wrap the azimuth value for continual horizontal rotation
-                    // between 0 and 2 * pi (360 deg)
-                    azimuth = Mathf.Repeat(value, 2 * Mathf.PI);
+                    get { return elevation; }
+                    set
+                    {
+                        // Clamp the elevation values between 0 and just under pi/2 (90 deg).
+                        // This prevents the angle from ever reaching the very top of the
+                        // hemisphere, which causes flickering between azimuth quadrants
+                        elevation = Mathf.Clamp(value, 0, Mathf.PI / 2 - Mathf.Deg2Rad / 2);
+                    }
                 }
-            }
 
-            // For debugging purposes
-            public override string ToString()
-            {
-                return "Radius: " + Radius + "\n" +
-                       "Elevation: " + Elevation + "\n" +
-                       "Azimuth: " + Azimuth + "\n";
+                public float Azimuth
+                {
+                    get { return azimuth; }
+                    set
+                    {
+                        // Wrap the azimuth value for continual horizontal rotation
+                        // between 0 and 2 * pi (360 deg)
+                        azimuth = Mathf.Repeat(value, 2 * Mathf.PI);
+                    }
+                }
             }
         }
     }

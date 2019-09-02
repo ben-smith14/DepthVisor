@@ -25,8 +25,6 @@ namespace DepthVisor.Playback
         [SerializeField] GameObject OptionsPanel = null;
         [SerializeField] GameObject OpenRecordingControls = null;
         [SerializeField] ScrollViewLoaderSelectable FileList = null;
-        [SerializeField] TextMeshProUGUI OpenErrorText = null;
-        [SerializeField] Button OpenFileButton = null;
         [SerializeField] GameObject UploadRecordingControls = null;
         [SerializeField] TMP_InputField PatientIDInput = null;
         [SerializeField] TMP_InputField AuthorIDInput = null;
@@ -39,24 +37,25 @@ namespace DepthVisor.Playback
 
         [Header("Playback Controls")]
         [SerializeField] CanvasGroup PlaybackControlsGroup = null;
-        [SerializeField] PlaybackTimesManager timesManager;
+        [SerializeField] SliderManager sliderManager = null;
         [SerializeField] TextMeshProUGUI FileNameText = null;
-        [SerializeField] Slider PlaybackSlider;
+        [SerializeField] Button PlayPauseButton = null;
+        [SerializeField] Button Rewind = null;
+        [SerializeField] Button FastForward = null;
+        [SerializeField] Sprite PlaySprite = null;
+        [SerializeField] Sprite PauseSprite = null;
 
         [Header("Playback Manager and Mesh")]
         [SerializeField] PlaybackManager playbackManager = null;
         [SerializeField] KinectMeshPlayback kinectMesh = null;
 
         [Header("UI Component Prefabs")]
-        [SerializeField] GameObject DialogBox;
         [SerializeField] GameObject LoadingBar = null;
-
-        public bool IsPlaying { get; private set; }
 
         private const string noRecordedFile = "empty";
         private const string loadingFileInfoMessage = "Please do not close the application. Extracting file information...";
         private const string loadingChunksMessage = "File found. Loading in initial data. Please do not close the application...";
-        private const string loadingMeshMessage = "File loaded. Preparing mesh...";
+        private const string bufferingMessage = "Video is buffering. Please wait...";
 
         private enum PlaybackState
         {
@@ -94,6 +93,10 @@ namespace DepthVisor.Playback
             uploadFileInputs.Add("bodySite", BodySiteInput);
             uploadFileInputs.Add("startDate", StartDateInput);
             uploadFileInputs.Add("startTime", StartTimeInput);
+        
+            // Remove this once fast forward and rewind functionality has been implemented
+            Rewind.interactable = false;
+            FastForward.interactable = false;
 
             // Then if the player prefs contains a key "fileName", the scene is being passed
             // a new recording from the recording scene
@@ -130,7 +133,7 @@ namespace DepthVisor.Playback
                 if (playbackManager.IsLoading)
                 {
                     int lastRemainingItems = loadingManager.RemainingDataItems;
-                    int actualRemainingItems = playbackManager.GetDataQueueCount();
+                    int actualRemainingItems = playbackManager.GetChunksToLoadCount();
 
                     // If the number of items in the processing queue has changed, update the
                     // loading bar progress
@@ -145,9 +148,6 @@ namespace DepthVisor.Playback
                 }
                 else
                 {
-                    // Change the loading message to indicate that the last step is initialising the mesh
-                    loadingManager.ChangeLoadingMessage(loadingMeshMessage);
-
                     // Call the method to show and initialise the mesh
                     kinectMesh.ShowAndInitialiseMesh();
 
@@ -158,8 +158,56 @@ namespace DepthVisor.Playback
                         loadingManager = null;
                     }
 
-                    // Change the playback state to paused
+                    // Initialise the slider and its timers, then change to the paused state
+                    sliderManager.InitialiseSlider(playbackManager.FileInfoOpen.TotalRecordingLength);
                     SetPlaybackState(PlaybackState.PausedFile);
+                }
+            }
+            else if (currentPlaybackState == PlaybackState.PlayingFile)
+            {
+                // If the playback manager has stopped playing because it needs to buffer, reflect this
+                // in the canvas by changing the state
+                if (!playbackManager.IsPlaying)
+                {
+                    SetPlaybackState(PlaybackState.BufferingFile);
+                }
+                else if (kinectMesh.LastFrame)
+                {
+                    // Else if the kinect mesh has reached its last frame, pause the file to stop playback
+                    TogglePlayPause();
+                }
+            }
+            else if (currentPlaybackState == PlaybackState.BufferingFile)
+            {
+                // If the playback manager is still buffering, check if the loading bar 
+                // can be updated
+                if (playbackManager.IsLoading)
+                {
+                    int lastRemainingItems = loadingManager.RemainingDataItems;
+                    int actualRemainingItems = playbackManager.GetChunksToLoadCount();
+
+                    // If the number of items in the processing queue has changed, update the
+                    // loading bar progress
+                    if (lastRemainingItems != actualRemainingItems)
+                    {
+                        // Update its progress by the difference between the remaining item values
+                        for (int i = 0; i < (lastRemainingItems - actualRemainingItems); i++)
+                        {
+                            loadingManager.Progress();
+                        }
+                    }
+                }
+                else
+                {
+                    // Otherwise, destroy and dereference the loading bar if it still exists
+                    if (loadingManager != null)
+                    {
+                        loadingManager.DestroyLoading();
+                        loadingManager = null;
+                    }
+
+                    // Then, go back to playing the video
+                    SetPlaybackState(PlaybackState.PlayingFile);
                 }
             }
         }
@@ -202,6 +250,22 @@ namespace DepthVisor.Playback
         public void UploadFileOptionsPanel()
         {
             SetPlaybackState(PlaybackState.UploadFileSelected);
+        }
+
+        public void TogglePlayPause()
+        {
+            // Change the play/pause button's image based on its state and notify the 
+            // playback manager to start or stop playback
+            if (playbackManager.IsPlaying)
+            {
+                PlayPauseButton.GetComponentInParent<Image>().sprite = PlaySprite;
+                SetPlaybackState(PlaybackState.PausedFile);
+            }
+            else
+            {
+                PlayPauseButton.GetComponentInParent<Image>().sprite = PauseSprite;
+                SetPlaybackState(PlaybackState.PlayingFile);
+            }
         }
 
         private void FileInfoLoadedHandler(object sender, EventArgs e)
@@ -268,7 +332,7 @@ namespace DepthVisor.Playback
 
                     // An instance of the loading bar should be available with a reference to its manager
                     // cached, so reinitialise the loading bar with the new chunk queue data
-                    loadingManager.InitialiseLoading(loadingChunksMessage, playbackManager.GetDataQueueCount());
+                    loadingManager.InitialiseLoading(loadingChunksMessage, playbackManager.GetChunksToLoadCount());
                     loadingManager.ShowLoading();
 
                     // Remove the file info finished loading event handler now that it has been triggered
@@ -278,20 +342,37 @@ namespace DepthVisor.Playback
                 // apart from the options panel
                 case PlaybackState.PausedFile:
                     SetUiStates(true, true, true, false, false, false, true);
+
+                    if (playbackManager.IsPlaying) { playbackManager.StopPlaying(); }
+                    sliderManager.StopPlaying();
                     break;
                 case PlaybackState.PlayingFile:
                     SetUiStates(true, true, true, false, false, false, true);
+                
+                    if (!playbackManager.IsPlaying) { playbackManager.StartPlaying(); }
+                    sliderManager.StartPlaying();
                     break;
                 // If the file is buffering, everything should be disabled to prevent errors from occurring
                 case PlaybackState.BufferingFile:
                     SetUiStates(false, false, false, false, false, false, false);
+                    sliderManager.StopPlaying();
+
+                    // Instantiate a loading bar prefab and get a reference to its manager class
+                    GameObject bufferingBar = Instantiate(LoadingBar, gameObject.transform) as GameObject;
+                    loadingManager = bufferingBar.GetComponent<LoadingBarManager>();
+
+                    // Then, initialise it with the chunks to load count from the playback manager and the
+                    // buffering messgae before showing it in the canvas
+                    loadingManager.InitialiseLoading(bufferingMessage, playbackManager.GetChunksToLoadCount());
+                    loadingManager.ShowLoading();
                     break;
                 // If the upload file button is selected, open the panel with this set of controls visible and disable
                 // the toolbar buttons apart from the home button. Also, disable the playback controls whilst the
                 // panel is open
                 case PlaybackState.UploadFileSelected:
                     SetUiStates(true, false, false, true, false, true, false);
-                    playbackManager.StopPlaying();
+
+                    if (playbackManager.IsPlaying) { playbackManager.StopPlaying(); }
                     break;
                 // TODO : If the user is uploading a file??
                 // (Maybe instantiate loading bar box that disables main canvas and tracks progress of upload, then when it
@@ -340,7 +421,6 @@ namespace DepthVisor.Playback
                         OptionsPanel.SetActive(true);
                         UploadRecordingControls.SetActive(false);
                         OpenRecordingControls.SetActive(true);
-                        OpenErrorText.enabled = false;
                         FileList.LoadFileNames();
                     }
                 }
@@ -364,7 +444,6 @@ namespace DepthVisor.Playback
                     // hide them
                     if (OpenRecordingControls.activeSelf)
                     {
-                        OpenErrorText.enabled = false;
                         FileList.ClearCurrentContent();
                         OpenRecordingControls.SetActive(false);
                         OptionsPanel.SetActive(false);

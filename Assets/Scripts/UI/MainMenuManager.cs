@@ -67,6 +67,11 @@ namespace DepthVisor.UI
             SceneManager.LoadScene("Playback");
         }
 
+        public void ExitApplication()
+        {
+            Application.Quit();
+        }
+
         public void SetSavePath()
         {
             // Disable all main menu buttons whilst the dialog box is open

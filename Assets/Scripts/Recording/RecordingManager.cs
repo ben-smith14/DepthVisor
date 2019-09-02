@@ -16,7 +16,7 @@ namespace DepthVisor.Recording
         [SerializeField] RecordingTimerManager timerManager = null;
         [SerializeField] short FramesPerStore = 50;
 
-        public event EventHandler ChunkFinishedSerialization;
+        public event EventHandler ChunkFinished;
         public event EventHandler FileInfoFinished;
 
         public bool IsProcessingFile { get; private set; }
@@ -25,7 +25,7 @@ namespace DepthVisor.Recording
         private KinectMeshGenerator kinectMesh;
         private FileSystemSaver fileSaver;
 
-        private KinectFramesStore tempKinectFrameStore;
+        private KinectFramesStore tempFrameStore;
         private Queue<KinectFramesStore> recordedDataQueue;
 
         private string currentFileName;
@@ -46,11 +46,11 @@ namespace DepthVisor.Recording
 
             // Add the background save handlers to the finished serialization event
             // and finished file info event
-            ChunkFinishedSerialization += ChunkSaveFinishedHandler;
+            ChunkFinished += ChunkSaveFinishedHandler;
             FileInfoFinished += FileInfoFinishedHandler;
 
             // Initialise the temporary kinect store object and the queue of store objects
-            tempKinectFrameStore = new KinectFramesStore(FramesPerStore);
+            tempFrameStore = new KinectFramesStore(FramesPerStore);
             recordedDataQueue = new Queue<KinectFramesStore>();
 
             // Initialise the flags
@@ -95,18 +95,18 @@ namespace DepthVisor.Recording
 
                 try
                 {
-                    tempKinectFrameStore.AddFrame(meshVertices, colourTexture, uvs, timeSinceLastFrame);
+                    tempFrameStore.AddFrame(meshVertices, colourTexture, uvs, timeSinceLastFrame);
                 }
                 catch (KinectFramesStore.FrameStoreFullException)
                 {
                     // If an exception is thrown, the temporary store is full, so copy it into
                     // the data queue
-                    recordedDataQueue.Enqueue(new KinectFramesStore(tempKinectFrameStore));
+                    recordedDataQueue.Enqueue(new KinectFramesStore(tempFrameStore));
 
                     // Then, reinitialise the temporary store and add the current frame to the
                     // new object
-                    tempKinectFrameStore = new KinectFramesStore(FramesPerStore);
-                    tempKinectFrameStore.AddFrame(meshVertices, colourTexture, uvs, timeSinceLastFrame);
+                    tempFrameStore = new KinectFramesStore(FramesPerStore);
+                    tempFrameStore.AddFrame(meshVertices, colourTexture, uvs, timeSinceLastFrame);
                 }
             }
 
@@ -148,7 +148,7 @@ namespace DepthVisor.Recording
             fileSaver.SerializeAndSaveFileChunk(currentFileName, (KinectFramesStore)callbackData);
 
             // Trigger the chunk finished serialization event
-            ChunkFinishedSerialization.Invoke(this, new EventArgs());
+            ChunkFinished.Invoke(this, new EventArgs());
         }
 
         // Callback for the thread pool work queue that uses the file manager's serialize and

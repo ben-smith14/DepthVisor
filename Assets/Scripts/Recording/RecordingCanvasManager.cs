@@ -15,43 +15,37 @@ namespace DepthVisor.Recording
     public class RecordingCanvasManager : MonoBehaviour
     {
         [Header("Main Camera")]
-        [SerializeField] CameraOrbitControls OrbitalCamera = null;
+        [SerializeField] private CameraOrbitControls OrbitalCamera = null;
 
         [Header("Toolbar Buttons")]
-        [SerializeField] Button HomeButton = null;
-        [SerializeField] Button NewRecordingButton = null;
+        [SerializeField] private Button HomeButton = null;
+        [SerializeField] private Button NewRecordingButton = null;
 
         [Header("Panel Components")]
-        [SerializeField] GameObject OptionsPanel = null;
-        [SerializeField] TMP_InputField FileNameInput = null;
-        [SerializeField] TextMeshProUGUI ErrorText = null;
-        [SerializeField] ScrollViewLoader FileList = null;
+        [SerializeField] private GameObject OptionsPanel = null;
+        [SerializeField] private TMP_InputField FileNameInput = null;
+        [SerializeField] private TextMeshProUGUI ErrorText = null;
+        [SerializeField] private ScrollViewLoader FileList = null;
 
         [Header("Recording Controls")]
-        [SerializeField] TextMeshProUGUI FileNameText = null;
-        [SerializeField] GameObject RecordingButtonContainer = null;
-        [SerializeField] Color32 RecordingOn = Color.red;
-        [SerializeField] Color32 RecordingOnHighlight = new Color32(245, 0, 0, 255);
-        [SerializeField] Color32 RecordingOnPressed = new Color32(200, 0, 0, 255);
-        [SerializeField] string RecordingOnText = "STOP";
-        [SerializeField] Color32 RecordingOnTextColour = Color.white;
-        [SerializeField] RecordingTimerManager TimerManager = null;
+        [SerializeField] private TextMeshProUGUI FileNameText = null;
+        [SerializeField] private GameObject RecordingButtonContainer = null;
+        [SerializeField] private Color32 RecordingOn = Color.red;
+        [SerializeField] private Color32 RecordingOnHighlight = new Color32(245, 0, 0, 255);
+        [SerializeField] private Color32 RecordingOnPressed = new Color32(200, 0, 0, 255);
+        [SerializeField] private string RecordingOnText = "STOP";
+        [SerializeField] private Color32 RecordingOnTextColour = Color.white;
+        [SerializeField] private RecordingTimerManager TimerManager = null;
 
         [Header("Mesh Object Manager")]
-        [SerializeField] KinectManager KinectManager = null;
+        [SerializeField] private KinectManager KinectManager = null;
 
         [Header("UI Component Prefabs")]
-        [SerializeField] GameObject DialogBox = null;
-        [SerializeField] GameObject LoadingBar = null;
+        [SerializeField] private GameObject DialogBox = null;
+        [SerializeField] private GameObject LoadingBar = null;
 
         [Header("Recording and File Access")]
-        [SerializeField] GameObject RecordingAndFileManager = null;
-
-        private static readonly Regex fileNamePattern = new Regex(@"^\w[\w\-]{2}\s?([\w\-]+\s?)*$", RegexOptions.Compiled);
-        private const string overwriteFileMessage = "That file already exists. Do you want to overwrite it?";
-        private const string loadingFileMessage = "Please do not close the application. The recording is being saved to disk...";
-        private const string openingPlaybackMessage = "Adding file info and opening the recording for playback. Please do not close the application...";
-        private const float borderFade = 127.5f;
+        [SerializeField] private GameObject RecordingAndFileManager = null;
 
         private enum RecordingState
         {
@@ -64,6 +58,12 @@ namespace DepthVisor.Recording
             StopRecording
         }
 
+        private static readonly Regex fileNamePattern = new Regex(@"^\w[\w\-]{2}\s?([\w\-]+\s?)*$", RegexOptions.Compiled);
+        private const string overwriteFileMessage = "That file already exists. Do you want to overwrite it?";
+        private const string loadingFileMessage = "Please do not close the application. The recording is being saved to disk...";
+        private const string openingPlaybackMessage = "Adding file info and opening the recording for playback. Please do not close the application...";
+        private const float borderFade = 127.5f;
+
         private RecordingState currentRecordingState;
         private RecordingManager recordingManager;
         private FileSystem fileManager;
@@ -73,9 +73,9 @@ namespace DepthVisor.Recording
         private TextMeshProUGUI recordingButtonText;
         private ColorBlock defaultButtonColours;
         private string defaultButtonText;
-        private Color32 defaultButtonTextColur;
+        private Color32 defaultButtonTextColour;
 
-        private GameObject dialogBox;
+        private DialogManager dialogManager;
         private LoadingBarManager loadingManager;
         private string currentOpenFileName;
 
@@ -95,7 +95,7 @@ namespace DepthVisor.Recording
             // Store the default values of these components for use later on
             defaultButtonColours = recordingButton.colors;
             defaultButtonText = recordingButtonText.text;
-            defaultButtonTextColur = recordingButtonText.color;
+            defaultButtonTextColour = recordingButtonText.color;
 
             // Set the recording state to indicate that no data is coming in yet
             SetRecordingState(RecordingState.NoData);
@@ -212,8 +212,8 @@ namespace DepthVisor.Recording
                     // Instantiate the dialog prefab, get its manager component, initialise the
                     // dialog, add a handler to the closing event and then show the dialog box,
                     // which will disable the main canvas group
-                    dialogBox = Instantiate(DialogBox, gameObject.transform) as GameObject;
-                    DialogManager dialogManager = dialogBox.GetComponent<DialogManager>();
+                    GameObject dialogBox = Instantiate(DialogBox, gameObject.transform) as GameObject;
+                    dialogManager = dialogBox.GetComponent<DialogManager>();
                     dialogManager.InitialiseDialog(overwriteFileMessage);
                     dialogManager.DialogClosed += DialogClosedHandler;
                     dialogManager.ShowDialog();
@@ -273,8 +273,11 @@ namespace DepthVisor.Recording
                 OrbitalCamera.MouseMovementEnabled();
             }
 
-            // Finally, dereference the soon to be destroyed dialog box
-            dialogBox = null;
+            // Finally, dereference the dialog manager
+            if (dialogManager != null)
+            {
+                dialogManager = null;
+            }
         }
 
         private void SetRecordingState(RecordingState newState)
@@ -433,7 +436,7 @@ namespace DepthVisor.Recording
                 // it is not recording
                 recordingButton.colors = defaultButtonColours;
                 recordingButtonText.text = defaultButtonText;
-                recordingButtonText.color = defaultButtonTextColur;
+                recordingButtonText.color = defaultButtonTextColour;
             }
         }
     }
