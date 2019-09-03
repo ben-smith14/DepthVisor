@@ -355,7 +355,7 @@ namespace DepthVisor.Kinect
                     // for this sample
                     if (depthData[fullIndex] == 0)
                     {
-                        sum += DepthMaxReliableDistance; // TODO : Experiment with changing this
+                        sum += DepthMaxReliableDistance;
                     }
                     else
                     {

@@ -43,8 +43,9 @@ namespace DepthVisor.UI
             // If the remaining data items are 0, simply update the UI components to
             // 100%. Otherwise, as the remaining data items will be decreasing, take
             // the percentage away from 100 to get the remaining percentage
-            if (RemainingDataItems == 0)
+            if (RemainingDataItems == 0 || RemainingDataItems < 0)
             {
+                RemainingDataItems = 0;
                 UpdateLoading(100.0f);
             }
             else
@@ -79,10 +80,6 @@ namespace DepthVisor.UI
                 // percentage text based on the normalised value
                 LoadingSlider.value = (int)percentageComplete;
                 LoadingPercentage.text = (int)percentageComplete + "%";
-            }
-            else
-            {
-                throw new System.ArgumentOutOfRangeException("Invalid percentage complete; must be in the range 0.0 - 100.0");
             }
         }
     }

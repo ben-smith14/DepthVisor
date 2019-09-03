@@ -24,6 +24,7 @@ namespace DepthVisor.Playback
         [Header("Panel Components")]
         [SerializeField] GameObject OptionsPanel = null;
         [SerializeField] GameObject OpenRecordingControls = null;
+        [SerializeField] Button DownloadButton = null;
         [SerializeField] ScrollViewLoaderSelectable FileList = null;
         [SerializeField] GameObject UploadRecordingControls = null;
         [SerializeField] TMP_InputField PatientIDInput = null;
@@ -77,8 +78,6 @@ namespace DepthVisor.Playback
 
         private IDictionary<string, TMP_InputField> uploadFileInputs;
         private string currentOpenFileName;
-        private int totalDataItems;
-        private int remainingDataItems;
         private bool fileInfoReady;
 
         void Start()
@@ -297,11 +296,11 @@ namespace DepthVisor.Playback
                 case PlaybackState.OpenFileSelected:
                     SetUiStates(true, false, false, true, true, false, false);
                     if (playbackManager.IsPlaying) { playbackManager.StopPlaying(); }
+
+                    // Remove this line once download is implemented
+                    DownloadButton.interactable = false;
                     break;
-                // TODO : If the user has indicated that they want to download a file from the open file options??
-                // (Maybe instantiate holorepo dialog box that disables main canvas and allows user to input patient
-                // id, then updates scroll view and allows them to select an option, press download, wait for download
-                // and then close dialog and open file)
+                // Downloading file state not implemented
                 case PlaybackState.DownloadingFile:
                     break;
                 // If the user has selected a file to open, disable all UI controls whilst it loads the file info
@@ -310,7 +309,7 @@ namespace DepthVisor.Playback
 
                     // Indicate to the playback manager that it should begin opening the specified file
                     // and add a event handler to the file info finished loading event
-                    playbackManager.FileInfoFinishedLoading += FileInfoLoadedHandler;
+                    playbackManager.FileInfoFinishedLoad += FileInfoLoadedHandler;
                     playbackManager.OpenFile(currentOpenFileName);
 
                     // Instantiate a loading bar prefab and get a reference to its manager class
@@ -336,7 +335,7 @@ namespace DepthVisor.Playback
                     loadingManager.ShowLoading();
 
                     // Remove the file info finished loading event handler now that it has been triggered
-                    playbackManager.FileInfoFinishedLoading -= FileInfoLoadedHandler;
+                    playbackManager.FileInfoFinishedLoad -= FileInfoLoadedHandler;
                     break;
                 // If the user has opened a file and they are playing it or they have paused it, everything will be enabled
                 // apart from the options panel
@@ -371,13 +370,13 @@ namespace DepthVisor.Playback
                 // panel is open
                 case PlaybackState.UploadFileSelected:
                     SetUiStates(true, false, false, true, false, true, false);
-
                     if (playbackManager.IsPlaying) { playbackManager.StopPlaying(); }
+
+                    // Remove this line once upload is implemented
+                    UploadRecordingButton.interactable = false;
+
                     break;
-                // TODO : If the user is uploading a file??
-                // (Maybe instantiate loading bar box that disables main canvas and tracks progress of upload, then when it
-                // completes, destroy loading bar and show dialog box that indicates it has completed, so it can just be
-                // dismissed or confirmed?)
+                // Uploading file state not implemented
                 case PlaybackState.UploadingFile:
                     break;
             }

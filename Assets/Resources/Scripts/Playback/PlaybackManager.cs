@@ -14,15 +14,15 @@ namespace DepthVisor.Playback
         [SerializeField] short RefreshBufferSize = 4;
         [SerializeField] short ChunkBufferSize = 2;
 
-        public event EventHandler FileInfoFinishedLoading;
-        public event EventHandler ChunkFinishedDeserialization;
+        public event EventHandler FileInfoFinishedLoad;
+        public event EventHandler ChunkFinishedLoad;
 
         public bool IsLoading { get; private set; }
         public bool IsPlaying { get; private set; }
         public FileSystem.FileInfo FileInfoOpen { get; private set; }
 
         private FileSystemLoader fileLoader;
-        private Queue<ChunkToLoad> chunksToLoadQueue;
+        private Queue<ChunkLoadData> chunksToLoadQueue;
         private Queue<KinectFramesStore> loadedChunkQueue;
 
         private int fileChunkIndex;
@@ -30,15 +30,16 @@ namespace DepthVisor.Playback
 
         void Start()
         {
+            // Initialise all local variables
             fileLoader = gameObject.GetComponent<FileSystemLoader>();
-
-            chunksToLoadQueue = new Queue<ChunkToLoad>();
+            chunksToLoadQueue = new Queue<ChunkLoadData>();
             loadedChunkQueue = new Queue<KinectFramesStore>();
             IsLoading = false;
             IsPlaying = false;
 
-            FileInfoFinishedLoading += FileInfoLoadFinishedHandler;
-            ChunkFinishedDeserialization += LoadChunkFinishedHandler;
+            // Subscribe event handlers to event
+            FileInfoFinishedLoad += FileInfoLoadFinishedHandler;
+            ChunkFinishedLoad += LoadChunkFinishedHandler;
         }
 
         public void StartPlaying()
@@ -54,11 +55,6 @@ namespace DepthVisor.Playback
         public int GetChunksToLoadCount()
         {
             return chunksToLoadQueue.Count;
-        }
-
-        public int GetChunkQueueCount()
-        {
-            return loadedChunkQueue.Count;
         }
 
         public KinectFramesStore GetNextChunk()
@@ -101,8 +97,7 @@ namespace DepthVisor.Playback
                     {
                         for (int i = lastChunkIndex + 1; i < fileChunkIndex + 1; i++)
                         {
-                            ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
-                            chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
+                            chunksToLoadQueue.Enqueue(new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]));
                         }
                     }
                     else
@@ -114,8 +109,7 @@ namespace DepthVisor.Playback
                         {
                             for (int i = lastChunkIndex + 2; i < fileChunkIndex + 1; i++)
                             {
-                                ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
-                                chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
+                                chunksToLoadQueue.Enqueue(new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]));
                             }
                         }
 
@@ -126,10 +120,11 @@ namespace DepthVisor.Playback
                 }
                 else
                 {
-                    // Otherwise, just load in the next chunk to replace the one just dequeued
+                    // Otherwise, progress the file chunk index and load in the next chunk to replace
+                    // the one just dequeued
                     fileChunkIndex++;
-                    ChunkToLoad newChunkToLoad = new ChunkToLoad(ChunkLoadCallback,
-                        new ChunkLoadData(GetChunkStartFromIndex(fileChunkIndex), FileInfoOpen.ChunkSizes[fileChunkIndex]));
+                    ChunkLoadData newChunkToLoad = new ChunkLoadData(GetChunkStartFromIndex(fileChunkIndex),
+                        FileInfoOpen.ChunkSizes[fileChunkIndex]);
 
                     // If another chunk is already loading, add this new chunk into the chunks to load
                     // queue. Otherwise, manually queue the chunk processing task on the background thread
@@ -139,7 +134,7 @@ namespace DepthVisor.Playback
                     }
                     else
                     {
-                        ThreadPool.QueueUserWorkItem(newChunkToLoad.LoadCallback, newChunkToLoad.LoadData);
+                        ThreadPool.QueueUserWorkItem(ChunkLoadCallback, newChunkToLoad);
                     }
                 }
             }
@@ -196,7 +191,7 @@ namespace DepthVisor.Playback
             }
 
             // Trigger this event
-            FileInfoFinishedLoading.Invoke(this, new EventArgs());
+            FileInfoFinishedLoad.Invoke(this, new EventArgs());
         }
 
         // Handler that is triggered when the file info has been loaded
@@ -220,8 +215,7 @@ namespace DepthVisor.Playback
             {
                 for (int i = 1; i < fileChunkIndex + 1; i++)
                 {
-                    ChunkLoadData data = new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]);
-                    chunksToLoadQueue.Enqueue(new ChunkToLoad(ChunkLoadCallback, data));
+                    chunksToLoadQueue.Enqueue(new ChunkLoadData(GetChunkStartFromIndex(i), FileInfoOpen.ChunkSizes[i]));
                 }
             }
 
@@ -237,7 +231,7 @@ namespace DepthVisor.Playback
             loadedChunkQueue.Enqueue(fileLoader.DeserializeAndLoadFileChunk(currentFileName, chunk.ChunkByteIndex, chunk.ChunkSize));
 
             // Finally, invoke the chunk finished event
-            ChunkFinishedDeserialization.Invoke(this, new EventArgs());
+            ChunkFinishedLoad.Invoke(this, new EventArgs());
         }
 
         // Handler that is triggered when a chunk has been loaded
@@ -248,26 +242,14 @@ namespace DepthVisor.Playback
             // execution
             if (chunksToLoadQueue.Count != 0)
             {
-                ChunkToLoad chunk = chunksToLoadQueue.Dequeue();
-                ThreadPool.QueueUserWorkItem(chunk.LoadCallback, chunk.LoadData);
+                ChunkLoadData chunk = chunksToLoadQueue.Dequeue();
+                ThreadPool.QueueUserWorkItem(ChunkLoadCallback, chunk);
             }
             else
             {
                 // Otherwise, the manager has finished loading data, so flip the
                 // relevant flags
                 IsLoading = false;
-            }
-        }
-
-        private class ChunkToLoad
-        {
-            public WaitCallback LoadCallback { get; private set; }
-            public ChunkLoadData LoadData { get; private set; }
-
-            public ChunkToLoad(WaitCallback callback, ChunkLoadData data)
-            {
-                LoadCallback = callback;
-                LoadData = data;
             }
         }
 

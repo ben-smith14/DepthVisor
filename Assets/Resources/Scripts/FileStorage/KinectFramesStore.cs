@@ -179,9 +179,6 @@ namespace DepthVisor.FileStorage
                 CompressedColour = colourImage; // Texture2D encoded into compressed JPEG byte array
                 Uvs = uvs; // 2D vector map between texture and vertices
                 FrameDeltaTime = frameDeltaTime; // Time between this frame and last frame
-
-                // TODO : For debugging frame sizes; shows them in bytes
-                //Debug.Log("DepthData: " + DepthData.Length * 4 + " RawColour: " + CompressedTexture.Length + " Uvs: " + Uvs.Length * 2 * 4 + " Delta Time: 4");
             }
 
             // Deserialize values constructor

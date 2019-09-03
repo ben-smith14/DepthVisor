@@ -186,7 +186,7 @@ namespace DepthVisor.Kinect
                 }
                 catch (System.InvalidOperationException e)
                 {
-                    Debug.LogException(e, this); // TODO: Better error handling?
+                    Debug.LogException(e, this);
                 }
 
                 multiSourceReader = null;

@@ -15,37 +15,37 @@ namespace DepthVisor.Recording
     public class RecordingCanvasManager : MonoBehaviour
     {
         [Header("Main Camera")]
-        [SerializeField] private CameraOrbitControls OrbitalCamera = null;
+        [SerializeField] CameraOrbitControls OrbitalCamera = null;
 
         [Header("Toolbar Buttons")]
-        [SerializeField] private Button HomeButton = null;
-        [SerializeField] private Button NewRecordingButton = null;
+        [SerializeField] Button HomeButton = null;
+        [SerializeField] Button NewRecordingButton = null;
 
         [Header("Panel Components")]
-        [SerializeField] private GameObject OptionsPanel = null;
-        [SerializeField] private TMP_InputField FileNameInput = null;
-        [SerializeField] private TextMeshProUGUI ErrorText = null;
-        [SerializeField] private ScrollViewLoader FileList = null;
+        [SerializeField] GameObject OptionsPanel = null;
+        [SerializeField] TMP_InputField FileNameInput = null;
+        [SerializeField] TextMeshProUGUI ErrorText = null;
+        [SerializeField] ScrollViewLoader FileList = null;
 
         [Header("Recording Controls")]
-        [SerializeField] private TextMeshProUGUI FileNameText = null;
-        [SerializeField] private GameObject RecordingButtonContainer = null;
-        [SerializeField] private Color32 RecordingOn = Color.red;
-        [SerializeField] private Color32 RecordingOnHighlight = new Color32(245, 0, 0, 255);
-        [SerializeField] private Color32 RecordingOnPressed = new Color32(200, 0, 0, 255);
-        [SerializeField] private string RecordingOnText = "STOP";
-        [SerializeField] private Color32 RecordingOnTextColour = Color.white;
-        [SerializeField] private RecordingTimerManager TimerManager = null;
+        [SerializeField] TextMeshProUGUI FileNameText = null;
+        [SerializeField] GameObject RecordingButtonContainer = null;
+        [SerializeField] Color32 RecordingOn = Color.red;
+        [SerializeField] Color32 RecordingOnHighlight = new Color32(245, 0, 0, 255);
+        [SerializeField] Color32 RecordingOnPressed = new Color32(200, 0, 0, 255);
+        [SerializeField] string RecordingOnText = "STOP";
+        [SerializeField] Color32 RecordingOnTextColour = Color.white;
+        [SerializeField] RecordingTimerManager TimerManager = null;
 
         [Header("Mesh Object Manager")]
-        [SerializeField] private KinectManager KinectManager = null;
+        [SerializeField] KinectManager KinectManager = null;
 
         [Header("UI Component Prefabs")]
-        [SerializeField] private GameObject DialogBox = null;
-        [SerializeField] private GameObject LoadingBar = null;
+        [SerializeField] GameObject DialogBox = null;
+        [SerializeField] GameObject LoadingBar = null;
 
         [Header("Recording and File Access")]
-        [SerializeField] private GameObject RecordingAndFileManager = null;
+        [SerializeField] GameObject RecordingAndFileManager = null;
 
         private enum RecordingState
         {

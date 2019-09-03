@@ -19,11 +19,5 @@ namespace DepthVisor.UI
             ColorBlock colors = gameObject.GetComponent<Button>().colors;
             gameObject.GetComponent<Image>().color = colors.normalColor;
         }
-
-        public void OnPressed()
-        {
-            ColorBlock colors = gameObject.GetComponent<Button>().colors;
-            gameObject.GetComponent<Image>().color = colors.pressedColor;
-        }
     }
 }

@@ -22,6 +22,7 @@ namespace DepthVisor.FileStorage
         public void CreateSaveDirectoryIfNotExists()
         {
             string directoryPath = GetFullSavePath();
+
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);

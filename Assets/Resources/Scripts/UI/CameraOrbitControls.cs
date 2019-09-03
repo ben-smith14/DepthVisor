@@ -5,16 +5,16 @@ namespace DepthVisor.UI
     public class CameraOrbitControls : MonoBehaviour
     {
         [Header("Tuning Parameters")]
-        [SerializeField] private float StartCameraRadius = 10f;
-        [SerializeField] private float StartCameraElevation = 20f;
-        [SerializeField] private float StartCameraAzimuth = 0f;
-        [SerializeField] private float MoveSpeed = 1f;
-        [SerializeField] private float ZoomSpeed = 1f;
-        [SerializeField] private float RadiusMin = 5f;
-        [SerializeField] private float RadiusMax = 25f;
+        [SerializeField] float StartCameraRadius = 10f;
+        [SerializeField] float StartCameraElevation = 20f;
+        [SerializeField] float StartCameraAzimuth = 0f;
+        [SerializeField] float MoveSpeed = 1f;
+        [SerializeField] float ZoomSpeed = 1f;
+        [SerializeField] float RadiusMin = 5f;
+        [SerializeField] float RadiusMax = 25f;
 
         [Header("Target Object")]
-        [SerializeField] private GameObject MeshTargetContainer = null;
+        [SerializeField] GameObject MeshTargetContainer = null;
 
         private CameraHemisphere cameraHemisphere;
         private bool allowMouseMovement;
@@ -53,8 +53,7 @@ namespace DepthVisor.UI
             }
 
             // Get the mouse scroll movement and invert again to set forward scrolling for zooming in and backwards
-            // scrolling for zooming out
-            // (TODO : Give option to invert this in options panel?)
+            // scrolling for zooming out (Remove minus sign if scrolling is inverted on a given system)
             float zoomAmount = -Input.mouseScrollDelta.y;
 
             // If at least one of the movement values is not equal to 0, move the camera in the desired direction

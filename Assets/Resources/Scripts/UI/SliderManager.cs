@@ -55,7 +55,7 @@ namespace DepthVisor.UI
             // Initialise the text and slider components to their minimum values
             CountUpTimer.text = RecordingTimerManager.TimeFloatToString(0.0f);
             PlaybackSlider.value = PlaybackSlider.minValue;
-            CountUpTimer.text = RecordingTimerManager.TimeFloatToString(recordingLength);
+            CountDownTimer.text = RecordingTimerManager.TimeFloatToString(recordingLength);
         }
 
         public void StartPlaying()
