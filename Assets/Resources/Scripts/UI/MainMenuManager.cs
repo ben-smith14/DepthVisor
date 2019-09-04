@@ -80,17 +80,34 @@ namespace DepthVisor.UI
             SavePathButton.interactable = false;
 
             // Start the coroutine that will open the dialog box and wait for a response from
-            // the user
-            StartCoroutine(ShowDialogCoroutine());
+            // the user. Initialise it to open at the current file path
+            string currentPath = PlayerPrefs.GetString("savePath", emptySavePath);
+            if (currentPath.Equals(emptySavePath))
+            {
+                StartCoroutine(ShowDialogCoroutine());
+            }
+            else
+            {
+                StartCoroutine(ShowDialogCoroutine(currentPath));
+            }
         }
 
-        private IEnumerator ShowDialogCoroutine()
+        private IEnumerator ShowDialogCoroutine(string currentPath = null)
         {
             // Show the dialog and wait for the user to either close it or select a file path. Set the box
-            // to file mode, set the starting folder as the current user's main folder and set the box heading
-            yield return FileBrowser.WaitForLoadDialog(true,
-                                                       Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                                                       "Select Save Path");
+            // to file mode and set the box heading
+            if (currentPath == null)
+            {
+                // If current path is null, set starting path to user's profile
+                yield return FileBrowser.WaitForLoadDialog(true,
+                                                           Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                                                           "Select Save Path");
+            }
+            else
+            {
+                // Otherwise, set the starting folder to the current path if not null
+                yield return FileBrowser.WaitForLoadDialog(true, currentPath, "Select Save Path");
+            }
 
             // Once the box has been closed, check whether or not a file was selected or if it was cancelled
             if (FileBrowser.Success)

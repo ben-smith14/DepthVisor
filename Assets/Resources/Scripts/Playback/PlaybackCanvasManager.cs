@@ -92,7 +92,10 @@ namespace DepthVisor.Playback
             uploadFileInputs.Add("bodySite", BodySiteInput);
             uploadFileInputs.Add("startDate", StartDateInput);
             uploadFileInputs.Add("startTime", StartTimeInput);
-        
+
+            // Subscribe the file info finished handler to the relevant event in the playback manager
+            playbackManager.FileInfoFinishedLoad += FileInfoLoadedHandler;
+
             // Remove this once fast forward and rewind functionality has been implemented
             Rewind.interactable = false;
             FastForward.interactable = false;
@@ -309,7 +312,6 @@ namespace DepthVisor.Playback
 
                     // Indicate to the playback manager that it should begin opening the specified file
                     // and add a event handler to the file info finished loading event
-                    playbackManager.FileInfoFinishedLoad += FileInfoLoadedHandler;
                     playbackManager.OpenFile(currentOpenFileName);
 
                     // Instantiate a loading bar prefab and get a reference to its manager class
@@ -333,9 +335,6 @@ namespace DepthVisor.Playback
                     // cached, so reinitialise the loading bar with the new chunk queue data
                     loadingManager.InitialiseLoading(loadingChunksMessage, playbackManager.GetChunksToLoadCount());
                     loadingManager.ShowLoading();
-
-                    // Remove the file info finished loading event handler now that it has been triggered
-                    playbackManager.FileInfoFinishedLoad -= FileInfoLoadedHandler;
                     break;
                 // If the user has opened a file and they are playing it or they have paused it, everything will be enabled
                 // apart from the options panel

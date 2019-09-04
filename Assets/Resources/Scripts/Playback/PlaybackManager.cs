@@ -73,9 +73,9 @@ namespace DepthVisor.Playback
             // left in the file
             if (fileChunkIndex < FileInfoOpen.ChunkSizes.Count-1)
             {
-                // If the loaded chunk queue is now under the buffer size, stop playback and
-                // load in more chunks to refresh the buffer
-                if (loadedChunkQueue.Count < ChunkBufferSize)
+                // If the loaded chunk queue is now equla to or under the buffer size,
+                // stop playback and load in more chunks to refresh the buffer
+                if (loadedChunkQueue.Count <= ChunkBufferSize)
                 {
                     StopPlaying();
 
@@ -138,12 +138,23 @@ namespace DepthVisor.Playback
                     }
                 }
             }
+            else if (IsLoading)
+            {
+                // Otherwise, if it is at the last position and loading data in, stop playing so that the
+                // final chunks can be added to the buffer before resuming playing
+                StopPlaying();
+            }
 
             return nextChunk;
         }
             
         public void OpenFile(string fileName)
         {
+            // Reset the queues and the playing flag for the new file
+            chunksToLoadQueue = new Queue<ChunkLoadData>();
+            loadedChunkQueue = new Queue<KinectFramesStore>();
+            IsPlaying = false;
+
             // Flip the is loading flag and store the file name to open
             IsLoading = true;
             currentFileName = fileName;
