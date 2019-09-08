@@ -22,7 +22,7 @@ To build this project, a Windows machine, a Kinect V2 and a Kinect Windows Adapt
 
 7. Once this has finished processing, you can then run this file by double-clicking on it.
 
-8. For the best performance when running the application, it is recommended that the Kinect V2 is connected to your computer for at least a few seconds before running the application.
+8. For the best performance, it is recommended that the Kinect V2 is connected to your computer for at least a few seconds before running the application.
 
 **User Instructions:**
 
