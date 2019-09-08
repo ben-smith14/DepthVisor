@@ -38,3 +38,7 @@ to the recording and playback scenes.
 **Image references:**
 
 [Surgery background](https://pixabay.com/photos/sci-fi-surgery-room-2992797), [Logo Goggles](https://www.flaticon.com/free-icon/virtual-reality-glasses_1994200#term=vr&page=1&position=72), [Logo Stethoscope](https://www.flaticon.com/free-icon/stethoscope_809957#term=stethoscope&page=1&position=1), [Home Button](https://www.flaticon.com/free-icon/home-icon-silhouette_69524#term=home&page=1&position=4), [Cross Button](https://www.flaticon.com/free-icon/cancel_126497#term=cross&page=1&position=3), [Play Button](https://www.flaticon.com/free-icon/play-button_149125#term=play&page=1&position=2), [Pause Button](https://www.flaticon.com/free-icon/pause_149127#term=pause&page=1&position=1), [Fast-Forward/Rewind](https://www.flaticon.com/free-icon/rewind_149129#term=rewind&page=1&position=2)
+
+**Code references:**
+
+[QuickLZ Script](http://www.quicklz.com/download.html), [Runtime File Browser](https://assetstore.unity.com/packages/tools/gui/runtime-file-browser-113006)
